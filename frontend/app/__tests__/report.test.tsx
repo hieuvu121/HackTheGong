@@ -107,6 +107,36 @@ describe('GPS gate', () => {
     await render(<Gate />);
     expect(screen.getByTestId('gate-locating')).toBeTruthy();
   });
+
+  describe('with the demo location override on', () => {
+    // EXPO_PUBLIC_DEMO_LOCATION makes the position synthetic, so there is no
+    // real proximity to check. The gate opens, but says so in as many words —
+    // a bypass nobody can mistake for a passed check.
+    beforeEach(() => {
+      mockLocation.status = 'demo';
+      mockLocation.coord = nudge(4000);
+    });
+
+    it('opens the camera even though the position is nowhere near', async () => {
+      await render(<Gate />);
+      await fireEvent.press(screen.getByTestId('gate-continue'));
+      expect(mockPush).toHaveBeenCalledWith('/report/capture?fixHazardId=hz-1');
+    });
+
+    it('says the check was skipped rather than claiming it passed', async () => {
+      await render(<Gate />);
+      expect(screen.getByTestId('gate-demo')).toBeTruthy();
+      expect(screen.queryByTestId('gate-allowed')).toBeNull();
+      expect(screen.queryByText('Location confirmed')).toBeNull();
+    });
+
+    it('is off unless the override is, so a real rider is still checked', async () => {
+      mockLocation.status = 'granted';
+      await render(<Gate />);
+      expect(screen.queryByTestId('gate-demo')).toBeNull();
+      expect(screen.getByTestId('gate-blocked')).toBeTruthy();
+    });
+  });
 });
 
 describe('Photo analysis', () => {

@@ -29,8 +29,12 @@ export default function Gate() {
   const { status, coord, accuracyM, refresh } = useLocation();
   const { hazard: target } = useHazard(fixHazardId);
 
+  // A synthetic position has no real proximity to check, so the gate opens and
+  // says outright that it was skipped. Only EXPO_PUBLIC_DEMO_LOCATION reaches
+  // this state; a real rider is still measured against the radius.
+  const demoLocation = status === 'demo';
   const gate = coord && target ? checkGate(coord, target.coord) : null;
-  const withinRange = gate?.withinRange ?? false;
+  const withinRange = demoLocation || (gate?.withinRange ?? false);
 
   const proceed = () => {
     if (withinRange) router.push(`/report/capture?fixHazardId=${fixHazardId}`);
@@ -61,7 +65,15 @@ export default function Gate() {
         </View>
       )}
 
-      {status === 'pending' ? (
+      {demoLocation ? (
+        <View testID="gate-demo" style={[styles.status, styles.waiting]}>
+          <Text style={[type.bodyMdStrong, { color: colors.ink }]}>Demo location — check skipped</Text>
+          <Text style={[type.bodySm, { color: colors.body }]}>
+            EXPO_PUBLIC_DEMO_LOCATION is on, so this position is made up and the
+            proximity check cannot mean anything. Turn it off to check for real.
+          </Text>
+        </View>
+      ) : status === 'pending' ? (
         <View testID="gate-locating" style={[styles.status, styles.waiting]}>
           <ActivityIndicator color={colors.ink} />
           <Text style={[type.bodyMdStrong, { color: colors.ink }]}>Finding you…</Text>
@@ -94,7 +106,7 @@ export default function Gate() {
         </View>
       )}
 
-      {status !== 'pending' && status !== 'granted' && (
+      {status !== 'pending' && status !== 'granted' && status !== 'demo' && (
         <Text testID="gate-no-location" style={[type.bodySm, { color: colors.body }]}>
           {status === 'denied'
             ? 'Location permission is off, so this cannot be confirmed. Turn it on in Settings, then try again.'
