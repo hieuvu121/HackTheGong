@@ -8,6 +8,7 @@ import { DangerBadge } from '../../src/components/DangerBadge';
 import { PhotoCarousel } from '../../src/components/PhotoCarousel';
 import { Button } from '../../src/components/Button';
 import { NavButton } from '../../src/components/NavButton';
+import { useGoBack } from '../../src/lib/useGoBack';
 import { formatWindow } from '../../src/lib/time';
 import { colors, radii, spacing } from '../../src/theme/tokens';
 import { useScreenTop } from '../../src/theme/insets';
@@ -16,6 +17,7 @@ import { type } from '../../src/theme/type';
 export default function Hazard() {
   const screenTop = useScreenTop();
   const router = useRouter();
+  const goBack = useGoBack();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { hazard, loading } = useHazard(id);
 
@@ -34,7 +36,7 @@ export default function Hazard() {
     return (
       <View style={[styles.root, styles.center, { paddingTop: screenTop }]}>
         <Text style={[type.bodyMd, { color: colors.body }]}>That hazard no longer exists.</Text>
-        <Button label="Back to the map" variant="subtle" onPress={() => router.back()} />
+        <Button label="Back to the map" variant="subtle" onPress={goBack} />
       </View>
     );
   }
@@ -60,7 +62,7 @@ export default function Hazard() {
               : `${hazard.streetName} · last updated ${reportedDays}d ago`}
           </Text>
         </View>
-        <NavButton testID="hazard-close" kind="close" onPress={() => router.back()} />
+        <NavButton testID="hazard-close" kind="close" onPress={goBack} />
       </View>
 
       {/* You tapped this off a map; losing the map loses the point. */}

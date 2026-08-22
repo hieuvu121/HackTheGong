@@ -4,7 +4,7 @@ import Navigate from '../navigate';
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
   useLocalSearchParams: () => ({ routeId: 'rt-fast' }),
 }));
 jest.mock('../../src/map/MapView', () => 'MapView');

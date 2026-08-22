@@ -5,6 +5,7 @@ import MapView from '../src/map/MapView';
 import { ManeuverBanner } from '../src/components/ManeuverBanner';
 import { Button } from '../src/components/Button';
 import { MapControl } from '../src/components/MapControl';
+import { useGoBack } from '../src/lib/useGoBack';
 import { ROUTES } from '../src/data/routes';
 import { HAZARDS } from '../src/data/hazards';
 import { KIND_LABEL } from '../src/data/types';
@@ -18,6 +19,7 @@ const TICK_MS = 3000;
 
 export default function Navigate() {
   const router = useRouter();
+  const goBack = useGoBack();
   const screenTop = useScreenTop(spacing.sm);
   const screenBottom = useScreenBottom();
   const { routeId } = useLocalSearchParams<{ routeId?: string }>();
@@ -130,7 +132,7 @@ export default function Navigate() {
               {`${remainingKm} km · arrive ${arrivalLabel}`}
             </Text>
           </View>
-          <Button label="End ride" variant="subtle" onPress={() => router.back()} />
+          <Button label="End ride" variant="subtle" onPress={goBack} />
         </View>
       </View>
     </View>

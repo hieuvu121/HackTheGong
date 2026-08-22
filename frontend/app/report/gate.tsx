@@ -4,6 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import MapView from '../../src/map/MapView';
 import { Button } from '../../src/components/Button';
 import { NavButton } from '../../src/components/NavButton';
+import { useGoBack } from '../../src/lib/useGoBack';
 import { checkGate, GATE_RADIUS_M } from '../../src/lib/geo';
 import { useLocation } from '../../src/lib/useLocation';
 import { useHazard } from '../../src/data/useHazards';
@@ -22,6 +23,7 @@ export default function Gate() {
   const screenTop = useScreenTop();
   const screenBottom = useScreenBottom();
   const router = useRouter();
+  const goBack = useGoBack();
   const { fixHazardId } = useLocalSearchParams<{ fixHazardId?: string }>();
 
   const { status, coord, accuracyM, refresh } = useLocation();
@@ -37,7 +39,7 @@ export default function Gate() {
   return (
     <View style={[styles.root, { paddingTop: screenTop, paddingBottom: screenBottom }]}>
       <View style={styles.head}>
-        <NavButton testID="gate-back" kind="back" onPress={() => router.back()} />
+        <NavButton testID="gate-back" kind="back" onPress={goBack} />
         <Text style={[type.displaySm, { color: colors.ink, flex: 1 }]}>Confirming you’re here</Text>
       </View>
 

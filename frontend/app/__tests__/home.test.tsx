@@ -6,7 +6,7 @@ import { markOnboardingSeen, resetOnboarding } from '../../src/lib/firstRun';
 const mockPush = jest.fn();
 const mockRedirect = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
   useLocalSearchParams: () => ({}),
   Redirect: (props: { href: string }) => {
     mockRedirect(props.href);

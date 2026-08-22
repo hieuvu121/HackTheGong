@@ -5,7 +5,7 @@ import { hasSeenOnboarding, resetOnboarding } from '../../src/lib/firstRun';
 
 const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: mockReplace }),
+  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: mockReplace, canGoBack: () => true }),
   useLocalSearchParams: () => ({}),
 }));
 

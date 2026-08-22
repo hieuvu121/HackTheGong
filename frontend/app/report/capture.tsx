@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Image, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { NavButton } from '../../src/components/NavButton';
+import { useGoBack } from '../../src/lib/useGoBack';
 import { takePhoto, pickPhoto, PickedPhoto } from '../../src/lib/photo';
 import { colors, radii, spacing } from '../../src/theme/tokens';
 import { useScreenTop, useScreenBottom } from '../../src/theme/insets';
@@ -13,6 +14,7 @@ export default function Capture() {
   const screenTop = useScreenTop();
   const screenBottom = useScreenBottom(spacing.xl);
   const router = useRouter();
+  const goBack = useGoBack();
   const { fixHazardId } = useLocalSearchParams<{ fixHazardId?: string }>();
 
   const [photo, setPhoto] = useState<PickedPhoto | null>(null);
@@ -48,7 +50,7 @@ export default function Capture() {
   return (
     <View style={styles.root}>
       <View style={[styles.head, { paddingTop: screenTop }]}>
-        <NavButton testID="capture-back" kind="back" floating onPress={() => router.back()} />
+        <NavButton testID="capture-back" kind="back" floating onPress={goBack} />
         <View style={{ flex: 1 }}>
           <Text style={[type.bodyMdStrong, { color: colors.onDark }]}>
             {fixHazardId ? 'Show us it’s fixed' : 'Photograph the hazard'}

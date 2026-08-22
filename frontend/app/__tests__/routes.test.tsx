@@ -4,7 +4,7 @@ import Routes from '../routes';
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn() }),
+  useRouter: () => ({ push: mockPush, back: jest.fn(), canGoBack: () => true }),
   useLocalSearchParams: () => ({ placeId: 'pl-3' }),
 }));
 jest.mock('../../src/map/MapView', () => 'MapView');

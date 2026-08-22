@@ -3,6 +3,7 @@ import { View, Text, Image, Pressable, ActivityIndicator, StyleSheet } from 'rea
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../src/components/Button';
 import { NavButton } from '../../src/components/NavButton';
+import { useGoBack } from '../../src/lib/useGoBack';
 import { DangerBadge } from '../../src/components/DangerBadge';
 import { ConfidenceMeter } from '../../src/components/ConfidenceMeter';
 import { analyzePhoto, submitReport, RemoteVerdict } from '../../src/api/client';
@@ -18,6 +19,7 @@ export default function Analysis() {
   const screenTop = useScreenTop();
   const screenBottom = useScreenBottom();
   const router = useRouter();
+  const goBack = useGoBack();
   const { uri, mimeType, fixHazardId } = useLocalSearchParams<{
     uri?: string;
     mimeType?: string;
@@ -48,7 +50,7 @@ export default function Analysis() {
     return (
       <View style={[styles.root, styles.center]}>
         <Text style={[type.bodyMd, { color: colors.body }]}>No photo to read.</Text>
-        <Button label="Back" variant="subtle" onPress={() => router.back()} />
+        <Button label="Back" variant="subtle" onPress={goBack} />
       </View>
     );
   }
@@ -90,7 +92,7 @@ export default function Analysis() {
   return (
     <View style={[styles.root, { paddingTop: screenTop, paddingBottom: screenBottom }]}>
       <View style={styles.head}>
-        <NavButton testID="analysis-back" kind="back" onPress={() => router.back()} />
+        <NavButton testID="analysis-back" kind="back" onPress={goBack} />
         <Text style={[type.displaySm, { color: colors.ink, flex: 1 }]}>Here’s what we found</Text>
       </View>
 

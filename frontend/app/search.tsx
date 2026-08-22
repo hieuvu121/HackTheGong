@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, FlatList, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { NavButton } from '../src/components/NavButton';
+import { useGoBack } from '../src/lib/useGoBack';
 import { PLACES } from '../src/data/places';
 import { colors, radii, spacing } from '../src/theme/tokens';
 import { useScreenTop } from '../src/theme/insets';
@@ -10,6 +11,7 @@ import { type } from '../src/theme/type';
 export default function Search() {
   const screenTop = useScreenTop();
   const router = useRouter();
+  const goBack = useGoBack();
   const [q, setQ] = useState('');
 
   const results = useMemo(() => {
@@ -29,7 +31,7 @@ export default function Search() {
     <View style={[styles.root, { paddingTop: screenTop }]}>
       <View style={styles.head}>
         <Text style={[type.displayMd, { color: colors.ink }]}>Where to?</Text>
-        <NavButton testID="search-close" kind="close" onPress={() => router.back()} />
+        <NavButton testID="search-close" kind="close" onPress={goBack} />
       </View>
 
       <View style={styles.field}>

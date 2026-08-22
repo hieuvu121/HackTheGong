@@ -4,7 +4,7 @@ import Hazard from '../hazard/[id]';
 import { Hazard as HazardType } from '../../src/data/types';
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), back: jest.fn(), canGoBack: () => true }),
   useLocalSearchParams: () => ({ id: 'hz-empty' }),
 }));
 jest.mock('../../src/map/MapView', () => 'MapView');

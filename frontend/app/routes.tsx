@@ -4,6 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import MapView from '../src/map/MapView';
 import { Sheet } from '../src/components/Sheet';
 import { NavButton } from '../src/components/NavButton';
+import { useGoBack } from '../src/lib/useGoBack';
 import { Button } from '../src/components/Button';
 import { RouteCard } from '../src/components/RouteCard';
 import { ROUTES } from '../src/data/routes';
@@ -22,6 +23,7 @@ import { type } from '../src/theme/type';
 
 export default function Routes() {
   const router = useRouter();
+  const goBack = useGoBack();
   const screenTop = useScreenTop();
   const { placeId } = useLocalSearchParams<{ placeId?: string }>();
   const place = PLACES.find((p) => p.id === placeId) ?? PLACES[2];
@@ -52,7 +54,7 @@ export default function Routes() {
       />
 
       <View style={[styles.back, { top: screenTop }]} pointerEvents="box-none">
-        <NavButton testID="routes-back" kind="back" floating onPress={() => router.back()} />
+        <NavButton testID="routes-back" kind="back" floating onPress={goBack} />
       </View>
 
       <Sheet style={styles.sheet}>

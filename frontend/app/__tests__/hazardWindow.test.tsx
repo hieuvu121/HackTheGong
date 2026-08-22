@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react-native';
 import Hazard from '../hazard/[id]';
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), back: jest.fn(), canGoBack: () => true }),
   // hz-2 is the unlit road: only a hazard between 19:00 and 06:00.
   useLocalSearchParams: () => ({ id: 'hz-2' }),
 }));
