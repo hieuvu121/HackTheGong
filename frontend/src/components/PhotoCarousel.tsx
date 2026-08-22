@@ -3,6 +3,7 @@ import { ScrollView, View, Text, Image, StyleSheet } from 'react-native';
 import { colors, radii, spacing, danger } from '../theme/tokens';
 import { type } from '../theme/type';
 import { HazardReport } from '../data/types';
+import { DEMO_PHOTOS } from '../data/demoPhotos';
 import { absoluteUrl } from '../api/config';
 
 interface Props {
@@ -17,42 +18,47 @@ export function PhotoCarousel({ reports }: Props) {
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-      {newestFirst.map((r, i) => (
-        <View key={r.id} style={styles.tile}>
-          <View style={styles.photo}>
-            {/* Uploaded photos come back as /uploads/<file>; the bundled
-                fixtures are just names, and have nothing to show. */}
-            {r.photo.startsWith('/uploads/') || r.photo.startsWith('http') ? (
-              <Image
-                testID={`photo-${i}`}
-                source={{ uri: absoluteUrl(r.photo) }}
-                style={styles.image}
-                resizeMode="cover"
-              />
-            ) : (
-              <Text testID={`photo-${i}`} style={[type.caption, { color: colors.body }]}>
-                {`${r.photo} · ${r.reporterName}`}
-              </Text>
-            )}
-            {r.intent === 'fix' && (
-              <View style={styles.fixTag}>
-                <Text style={[type.caption, { color: colors.onPrimary }]}>Fix</Text>
-              </View>
-            )}
-          </View>
-          <Text style={[type.bodySmStrong, { color: colors.ink }]}>{r.reporterName}</Text>
-          <Text style={[type.caption, { color: colors.body }]}>{when(r.reportedAt)}</Text>
-          <View style={styles.tierRow}>
-            {/* The verdict screen dropped confidence deliberately; showing it
-                here too put a severity-coloured dot beside a percentage, where
-                it read as a judgement on the confidence. Tier only, labelled. */}
-            <View style={[styles.dot, { backgroundColor: danger[r.ai.dangerLevel].color }]} />
-            <Text style={[type.caption, { color: colors.body }]}>
-              {`Rated ${danger[r.ai.dangerLevel].label.toLowerCase()}`}
+      {newestFirst.map((r, i) => {
+        const demoPhoto = DEMO_PHOTOS[r.photo];
+        const remotePhoto = r.photo.startsWith('/uploads/') || r.photo.startsWith('http');
+
+        return (
+          <View key={r.id} style={styles.tile}>
+            <View style={styles.photo}>
+              {demoPhoto || remotePhoto ? (
+                <Image
+                  testID={`photo-${i}`}
+                  source={demoPhoto ?? { uri: absoluteUrl(r.photo) }}
+                  style={styles.image}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text testID={`photo-${i}`} style={[type.caption, styles.fallback]}>
+                  {`${r.photo} · ${r.reporterName}`}
+                </Text>
+              )}
+              {r.intent === 'fix' && (
+                <View style={styles.fixTag}>
+                  <Text style={[type.caption, { color: colors.onPrimary }]}>Fix</Text>
+                </View>
+              )}
+            </View>
+            <Text testID={`reporter-${i}`} style={[type.bodySmStrong, { color: colors.ink }]}>
+              {r.reporterName}
             </Text>
+            <Text style={[type.caption, { color: colors.body }]}>{when(r.reportedAt)}</Text>
+            <View style={styles.tierRow}>
+              {/* The verdict screen dropped confidence deliberately; showing it
+                  here too put a severity-coloured dot beside a percentage, where
+                  it read as a judgement on the confidence. Tier only, labelled. */}
+              <View style={[styles.dot, { backgroundColor: danger[r.ai.dangerLevel].color }]} />
+              <Text style={[type.caption, { color: colors.body }]}>
+                {`Rated ${danger[r.ai.dangerLevel].label.toLowerCase()}`}
+              </Text>
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </ScrollView>
   );
 }
@@ -68,9 +74,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
-    padding: spacing.sm,
   },
   image: { width: '100%', height: '100%', borderRadius: radii.lg },
+  fallback: { color: colors.body, padding: spacing.sm },
   fixTag: {
     position: 'absolute',
     top: spacing.sm,
