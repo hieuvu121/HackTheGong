@@ -1,4 +1,5 @@
-import { hazardFeatureCollection, routeFeature, pointFeatureCollection } from '../geojson';
+import { hazardFeatureCollection, routeFeature, pointFeatureCollection, circleFeatureCollection } from '../geojson';
+import { haversineMeters } from '../../lib/geo';
 import { HAZARDS } from '../../data/hazards';
 import { ROUTES } from '../../data/routes';
 
@@ -40,5 +41,27 @@ describe('pointFeatureCollection', () => {
   it('renders the user position as a point', () => {
     const fc = pointFeatureCollection([{ lng: 1, lat: 2 }]);
     expect(fc.features[0].geometry.coordinates).toEqual([1, 2]);
+  });
+});
+
+describe('circleFeatureCollection', () => {
+  const center = { lng: 150.8935, lat: -34.4278 };
+
+  it('closes the ring', () => {
+    const [ring] = circleFeatureCollection(center, 75).features[0].geometry.coordinates;
+    expect(ring[0]).toEqual(ring[ring.length - 1]);
+  });
+
+  it('puts every vertex within a metre of the requested radius', () => {
+    const [ring] = circleFeatureCollection(center, 75).features[0].geometry.coordinates;
+    for (const [lng, lat] of ring) {
+      const d = haversineMeters(center, { lng, lat });
+      expect(Math.abs(d - 75)).toBeLessThan(1);
+    }
+  });
+
+  it('scales with the radius', () => {
+    const big = circleFeatureCollection(center, 300).features[0].geometry.coordinates[0];
+    expect(haversineMeters(center, { lng: big[0][0], lat: big[0][1] })).toBeCloseTo(300, 0);
   });
 });

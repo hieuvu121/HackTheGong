@@ -22,3 +22,10 @@ export function formatDepartureLabel(at: Date, isNow: boolean): string {
   const mm = String(at.getMinutes()).padStart(2, '0');
   return `Leaving ${hh}:${mm}`;
 }
+
+/** "after dark, 19:00–06:00" — the window in words, for the hazard sheet. */
+export function formatWindow(w: TimeWindow): string {
+  const hhmm = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  return `between ${hhmm(w.startMin)} and ${hhmm(w.endMin)}`;
+}

@@ -73,6 +73,15 @@ export const HAZARDS: Hazard[] = [
         intent: 'report',
         ai: v('pothole', 'moderate', 0.83, 'Deep pothole in the bike lane, roughly 30cm across.'),
       },
+      {
+        id: 'rp-9',
+        hazardId: 'hz-3',
+        photo: 'pothole-patched',
+        reportedAt: '2026-08-21T16:20:00Z',
+        reporterName: 'Tom',
+        intent: 'fix',
+        ai: v('pothole', 'low', 0.58, 'Looks patched, though the seam is still rough.'),
+      },
     ],
   },
   {

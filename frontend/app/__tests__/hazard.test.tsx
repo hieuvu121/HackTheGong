@@ -7,6 +7,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: jest.fn() }),
   useLocalSearchParams: () => ({ id: 'hz-1' }),
 }));
+jest.mock('../../src/map/MapView', () => 'MapView');
 
 beforeEach(() => mockPush.mockClear());
 
@@ -35,10 +36,20 @@ describe('Hazard detail', () => {
     expect(screen.getByTestId('photo-1').props.children).toContain('Mia');
   });
 
-  it('routes into the fix flow carrying the hazard id', async () => {
+  it('routes into the fix flow via the location check, carrying the hazard id', async () => {
     await render(<Hazard />);
     await fireEvent.press(screen.getByText('Report as fixed'));
-    expect(mockPush).toHaveBeenCalledWith('/report/capture?fixHazardId=hz-1');
+    expect(mockPush).toHaveBeenCalledWith('/report/gate?fixHazardId=hz-1');
+  });
+
+  it('can be dismissed', async () => {
+    await render(<Hazard />);
+    expect(screen.getByTestId('hazard-close')).toBeTruthy();
+  });
+
+  it('shows no time window for an all-hours hazard', async () => {
+    await render(<Hazard />);
+    expect(screen.queryByTestId('active-window')).toBeNull();
   });
 
   it('no longer offers the inert report-incorrect action', async () => {

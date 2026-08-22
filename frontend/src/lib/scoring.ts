@@ -31,15 +31,36 @@ export function countByLevel(hazards: Hazard[]): HazardCount {
   return c;
 }
 
+/** Total hazard weight a route carries at a given departure time. */
+export function hazardScore(route: RouteOption, hazards: Hazard[], at: Date): number {
+  return activeHazardsForRoute(route, hazards, at).reduce(
+    (sum, h) => sum + WEIGHT[h.dangerLevel],
+    0,
+  );
+}
+
+/**
+ * True only when nothing else is as safe. Two routes carrying the same hazards
+ * are not distinguishable on safety, and badging one of them "Safest" reads as
+ * arbitrary — which is exactly what a rider sees when both cards say the same
+ * thing. Ties fall through to the weaker "Recommended" badge instead.
+ */
+export function isStrictlySafest(
+  route: RouteOption,
+  routes: RouteOption[],
+  hazards: Hazard[],
+  at: Date,
+): boolean {
+  const mine = hazardScore(route, hazards, at);
+  return routes.every((r) => r.id === route.id || hazardScore(r, hazards, at) > mine);
+}
+
 export function safestRouteId(routes: RouteOption[], hazards: Hazard[], at: Date): string {
   let best = routes[0];
   let bestScore = Infinity;
 
   for (const r of routes) {
-    const score = activeHazardsForRoute(r, hazards, at).reduce(
-      (sum, h) => sum + WEIGHT[h.dangerLevel],
-      0,
-    );
+    const score = hazardScore(r, hazards, at);
 
     if (score < bestScore || (score === bestScore && r.durationMin < best.durationMin)) {
       best = r;

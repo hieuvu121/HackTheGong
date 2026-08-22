@@ -3,7 +3,9 @@ export const colors = {
   onPrimary: '#ffffff',
   ink: '#000000',
   body: '#5e5e5e',
-  mute: '#afafaf',
+  // Darkened from DESIGN.md's #afafaf: that value sits at 2.19:1 on canvas and
+  // 1.91:1 on canvasSoft, failing WCAG for the placeholder text it carries.
+  mute: '#767676',
   hairlineMid: '#4b4b4b',
   canvas: '#ffffff',
   canvasSoft: '#efefef',
@@ -61,8 +63,11 @@ export const shadows = {
 
 // The single deliberate deviation from DESIGN.md's mono rule.
 // Used ONLY on hazard pins, danger badges, confidence bars. Never on CTAs.
+// Amber and green are darkened from DESIGN.md's #f5a623 / #1a9e5a. At those
+// values a white pin glyph sat at 2.03:1 and 3.45:1 — below the 3:1 floor for
+// meaningful graphics. These read the same hue and clear 5:1.
 export const danger = {
   dangerous: { color: '#d6202a', label: 'Dangerous', fill: 'solid' as const },
-  moderate: { color: '#f5a623', label: 'Moderate', fill: 'half' as const },
-  low: { color: '#1a9e5a', label: 'Low risk', fill: 'outline' as const },
+  moderate: { color: '#a35f00', label: 'Moderate', fill: 'half' as const },
+  low: { color: '#0f7a43', label: 'Low risk', fill: 'outline' as const },
 } as const;

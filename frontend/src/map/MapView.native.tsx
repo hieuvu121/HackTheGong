@@ -1,9 +1,12 @@
 import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
-import { Map, Camera, GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
+import { Map, Camera, GeoJSONSource, Layer, Marker } from '@maplibre/maplibre-react-native';
 import type { FeatureCollection } from 'geojson';
 import { MapViewProps, STYLE_URL } from './types';
-import { hazardFeatureCollection, routeFeature, pointFeatureCollection } from './geojson';
+import { routeFeature, pointFeatureCollection, circleFeatureCollection } from './geojson';
+import { HazardPin } from '../components/HazardPin';
+import { hazardPinState } from '../lib/pins';
+import { KIND_LABEL } from '../data/types';
 import { colors } from '../theme/tokens';
 
 /**
@@ -11,11 +14,6 @@ import { colors } from '../theme/tokens';
  * paint properties, so the map reads identically on both platforms.
  */
 export default function MapView(props: MapViewProps) {
-  const hazards = useMemo(
-    () => hazardFeatureCollection(props.hazards ?? []) as FeatureCollection,
-    [props.hazards],
-  );
-
   const routes = useMemo(
     () =>
       ({
@@ -23,6 +21,14 @@ export default function MapView(props: MapViewProps) {
         features: (props.routes ?? []).map((r) => routeFeature(r, r.id === props.activeRouteId)),
       }) as FeatureCollection,
     [props.routes, props.activeRouteId],
+  );
+
+  const gate = useMemo(
+    () =>
+      (props.gateCircle
+        ? circleFeatureCollection(props.gateCircle.center, props.gateCircle.radiusM)
+        : { type: 'FeatureCollection', features: [] }) as FeatureCollection,
+    [props.gateCircle],
   );
 
   const user = useMemo(
@@ -55,8 +61,11 @@ export default function MapView(props: MapViewProps) {
     <Map style={StyleSheet.absoluteFill} mapStyle={STYLE_URL} logo={false} attribution={false}>
       {bounds ? (
         <Camera bounds={bounds} padding={props.fitPadding} duration={600} />
-      ) : props.follow ? (
+      ) : props.follow || props.recenterNonce ? (
         <Camera
+          // recenterNonce re-seats the camera on demand; without follow the
+          // rider's own pan is otherwise left alone.
+          key={props.follow ? 'follow' : `recenter-${props.recenterNonce}`}
           center={[props.center.lng, props.center.lat]}
           zoom={props.zoom ?? 14}
           bearing={props.followBearing ?? 0}
@@ -91,6 +100,19 @@ export default function MapView(props: MapViewProps) {
         />
       </GeoJSONSource>
 
+      <GeoJSONSource id="gate" data={gate}>
+        <Layer
+          id="gate-fill"
+          type="fill"
+          paint={{ 'fill-color': colors.ink, 'fill-opacity': 0.06 }}
+        />
+        <Layer
+          id="gate-outline"
+          type="line"
+          paint={{ 'line-color': colors.ink, 'line-width': 2, 'line-dasharray': [2, 2] }}
+        />
+      </GeoJSONSource>
+
       <GeoJSONSource id="user" data={user}>
         <Layer
           id="user-halo"
@@ -109,30 +131,16 @@ export default function MapView(props: MapViewProps) {
         />
       </GeoJSONSource>
 
-      <GeoJSONSource
-        id="hazards"
-        data={hazards}
-        onPress={(e) => {
-          const id = e.nativeEvent.features?.[0]?.properties?.id;
-          if (id) props.onHazardPress?.(String(id));
-        }}
-      >
-        <Layer
-          id="hazards-halo"
-          type="circle"
-          paint={{ 'circle-radius': 16, 'circle-color': ['get', 'color'], 'circle-opacity': 0.18 }}
-        />
-        <Layer
-          id="hazards-dot"
-          type="circle"
-          paint={{
-            'circle-radius': 8,
-            'circle-color': ['get', 'color'],
-            'circle-stroke-width': 3,
-            'circle-stroke-color': colors.canvas,
-          }}
-        />
-      </GeoJSONSource>
+      {(props.hazards ?? []).map((h) => (
+        <Marker key={h.id} id={h.id} lngLat={[h.coord.lng, h.coord.lat]} anchor="center">
+          <HazardPin
+            level={h.dangerLevel}
+            state={hazardPinState(h)}
+            label={`${KIND_LABEL[h.kind]} on ${h.streetName}`}
+            onPress={() => props.onHazardPress?.(h.id)}
+          />
+        </Marker>
+      ))}
     </Map>
   );
 }

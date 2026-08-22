@@ -15,6 +15,17 @@ export interface MapViewProps {
    * own pan and pinch are never yanked back.
    */
   follow?: boolean;
+  /**
+   * Draw the report geofence — the radius a rider has to stand inside before
+   * they can submit. Shown on the gate screen so the rule is visible, not just
+   * asserted in copy.
+   */
+  gateCircle?: { center: LngLat; radiusM: number };
+  /**
+   * Bump this to snap the camera back to `center`, without turning on `follow`.
+   * Drives the locate button: the rider keeps their own pan until they ask.
+   */
+  recenterNonce?: number;
   /** Frame these coordinates instead of honouring `center`/`zoom`. */
   fitTo?: LngLat[];
   /** Screen-space insets for `fitTo`, so a bottom sheet doesn't cover the route. */

@@ -1,4 +1,4 @@
-import { haversineMeters, checkGate, GATE_RADIUS_M } from '../geo';
+import { haversineMeters, checkGate, GATE_RADIUS_M, bearingBetween, bearingDelta } from '../geo';
 
 const wollongong = { lng: 150.8931, lat: -34.4278 };
 
@@ -41,5 +41,35 @@ describe('checkGate', () => {
   it('rounds the distance to a whole metre for display', () => {
     const near = { lng: 150.8935, lat: -34.428 };
     expect(Number.isInteger(checkGate(near, wollongong).distanceM)).toBe(true);
+  });
+});
+
+describe('bearingBetween', () => {
+  const here = { lng: 150.8935, lat: -34.4278 };
+
+  it('reads 0 due north and 90 due east', () => {
+    expect(bearingBetween(here, { ...here, lat: here.lat + 0.01 })).toBeCloseTo(0, 0);
+    expect(bearingBetween(here, { ...here, lng: here.lng + 0.01 })).toBeCloseTo(90, 0);
+  });
+
+  it('reads 180 due south and 270 due west', () => {
+    expect(bearingBetween(here, { ...here, lat: here.lat - 0.01 })).toBeCloseTo(180, 0);
+    expect(bearingBetween(here, { ...here, lng: here.lng - 0.01 })).toBeCloseTo(270, 0);
+  });
+
+  it('always returns a positive bearing', () => {
+    expect(bearingBetween(here, { lng: here.lng - 0.02, lat: here.lat - 0.02 })).toBeGreaterThan(0);
+  });
+});
+
+describe('bearingDelta', () => {
+  it('signs a turn to the right positive and left negative', () => {
+    expect(bearingDelta(0, 90)).toBe(90);
+    expect(bearingDelta(0, 270)).toBe(-90);
+  });
+
+  it('takes the short way round the wrap', () => {
+    expect(bearingDelta(350, 10)).toBe(20);
+    expect(bearingDelta(10, 350)).toBe(-20);
   });
 });

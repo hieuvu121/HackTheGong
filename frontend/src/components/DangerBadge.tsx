@@ -6,16 +6,15 @@ import { DangerLevel } from '../data/types';
 
 interface Props {
   level: DangerLevel;
-  compact?: boolean;
   testID?: string;
 }
 
-export function DangerBadge({ level, compact, testID }: Props) {
+export function DangerBadge({ level, testID }: Props) {
   const d = danger[level];
   return (
     <View
       testID={testID}
-      style={[styles.badge, { borderColor: d.color }, compact && styles.compact]}
+      style={[styles.badge, { borderColor: d.color }]}
     >
       <View
         style={[
@@ -43,6 +42,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     alignSelf: 'flex-start',
   },
-  compact: { paddingVertical: 2, paddingHorizontal: spacing.sm },
   dot: { width: 10, height: 10, borderRadius: radii.full, borderWidth: 1.5 },
 });

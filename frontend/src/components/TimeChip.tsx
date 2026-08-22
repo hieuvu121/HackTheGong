@@ -20,7 +20,7 @@ export function TimeChip({ at, isNow, onPress, testID }: Props) {
       style={[styles.chip, shadows.level3]}
     >
       <Text style={[type.bodySmStrong, { color: colors.ink }]}>
-        {`${formatDepartureLabel(at, isNow)}  ▾`}
+        {formatDepartureLabel(at, isNow)}
       </Text>
     </Pressable>
   );

@@ -9,7 +9,15 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../../src/map/MapView', () => 'MapView');
 
-beforeEach(() => mockPush.mockClear());
+// The badge depends on departure time — after 19:00 the unlit hazard levels
+// two of the routes — so the clock is pinned rather than left to whenever the
+// suite happens to run.
+beforeEach(() => {
+  jest.useFakeTimers().setSystemTime(new Date('2026-08-22T09:00:00'));
+  mockPush.mockClear();
+});
+
+afterEach(() => jest.useRealTimers());
 
 describe('Route selection', () => {
   it('renders one card per route option', async () => {
@@ -40,5 +48,14 @@ describe('Route selection', () => {
     await fireEvent.press(screen.getByTestId('route-rt-fast'));
     await fireEvent.press(screen.getByTestId('start-btn'));
     expect(mockPush).toHaveBeenCalledWith('/navigate?routeId=rt-fast');
+  });
+
+  it('downgrades the badge when two routes are equally safe', async () => {
+    // 21:00: the unlit hazard is live, both calm routes score the same, and
+    // "Safest" would be an arbitrary pick between them.
+    jest.setSystemTime(new Date('2026-08-22T21:00:00'));
+    await render(<Routes />);
+    expect(screen.queryByText('Safest')).toBeNull();
+    expect(screen.getByText('Recommended')).toBeTruthy();
   });
 });

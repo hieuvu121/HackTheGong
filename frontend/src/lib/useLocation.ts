@@ -1,0 +1,53 @@
+import { useCallback, useEffect, useState } from 'react';
+import * as Location from 'expo-location';
+import { LngLat } from '../data/types';
+import { ORIGIN } from '../data/locale';
+
+export type LocationStatus = 'pending' | 'granted' | 'denied' | 'unavailable';
+
+export interface LocationState {
+  status: LocationStatus;
+  coord: LngLat | null;
+  accuracyM: number | null;
+  refresh: () => Promise<void>;
+}
+
+/**
+ * The rider's real position.
+ *
+ * Falls back to the demo origin only when the device refuses — a simulator
+ * with no location set would otherwise leave the report flow dead in the
+ * water. `status` always says which of the two you are looking at.
+ */
+export function useLocation(): LocationState {
+  const [status, setStatus] = useState<LocationStatus>('pending');
+  const [coord, setCoord] = useState<LngLat | null>(null);
+  const [accuracyM, setAccuracyM] = useState<number | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        setStatus('denied');
+        setCoord(ORIGIN);
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setCoord({ lng: position.coords.longitude, lat: position.coords.latitude });
+      setAccuracyM(position.coords.accuracy ?? null);
+      setStatus('granted');
+    } catch {
+      setStatus('unavailable');
+      setCoord(ORIGIN);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { status, coord, accuracyM, refresh };
+}
