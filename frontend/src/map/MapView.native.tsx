@@ -69,7 +69,7 @@ export default function MapView(props: MapViewProps) {
           center={[props.center.lng, props.center.lat]}
           zoom={props.zoom ?? 14}
           bearing={props.followBearing ?? 0}
-          duration={600}
+          duration={props.follow ? 100 : 600}
         />
       ) : (
         // Initial view only — a controlled Camera would fight the rider's pinch.

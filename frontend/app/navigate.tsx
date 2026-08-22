@@ -16,6 +16,7 @@ import { useScreenTop, useScreenBottom } from '../src/theme/insets';
 import { type } from '../src/theme/type';
 
 const TICK_MS = 3000;
+const FRAME_MS = 50;
 
 export default function Navigate() {
   const router = useRouter();
@@ -25,31 +26,41 @@ export default function Navigate() {
   const { routeId } = useLocalSearchParams<{ routeId?: string }>();
   const route = ROUTES.find((r) => r.id === routeId) ?? ROUTES[0];
 
-  const [idx, setIdx] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const at = useMemo(() => new Date(), []);
 
   useEffect(() => {
-    const t = setInterval(
-      () => setIdx((i) => Math.min(i + 1, route.geometry.length - 1)),
-      TICK_MS,
-    );
+    const endMs = (route.geometry.length - 1) * TICK_MS;
+    const t = setInterval(() => {
+      setElapsedMs((elapsed) => Math.min(elapsed + FRAME_MS, endMs));
+    }, FRAME_MS);
     return () => clearInterval(t);
   }, [route.geometry.length]);
 
-  const here = route.geometry[idx];
+  const routePosition = Math.min(elapsedMs / TICK_MS, route.geometry.length - 1);
+  const segmentIndex = Math.min(Math.floor(routePosition), route.geometry.length - 2);
+  const segmentProgress = Math.min(routePosition - segmentIndex, 1);
+  const segmentStart = route.geometry[segmentIndex];
+  const segmentEnd = route.geometry[segmentIndex + 1];
+  const here = useMemo(
+    () => ({
+      lng: segmentStart.lng + (segmentEnd.lng - segmentStart.lng) * segmentProgress,
+      lat: segmentStart.lat + (segmentEnd.lat - segmentStart.lat) * segmentProgress,
+    }),
+    [segmentStart, segmentEnd, segmentProgress],
+  );
 
   // F13: the camera follows the direction of travel. Instructions say "turn
   // left"; a north-locked map makes the rider translate that mid-ride.
   const heading = useMemo(() => {
-    const ahead = route.geometry[Math.min(idx + 1, route.geometry.length - 1)];
-    const behind = route.geometry[Math.max(idx - 1, 0)];
-    return ahead === behind ? 0 : bearingBetween(behind, ahead);
-  }, [route.geometry, idx]);
+    return segmentStart === segmentEnd ? 0 : bearingBetween(segmentStart, segmentEnd);
+  }, [segmentStart, segmentEnd]);
 
-  const nextStep = route.steps.find((s) => s.atIndex > idx) ?? route.steps[route.steps.length - 1];
+  const nextStep =
+    route.steps.find((s) => s.atIndex > routePosition) ?? route.steps[route.steps.length - 1];
   const toNextM = Math.round(haversineMeters(here, route.geometry[nextStep.atIndex] ?? here));
 
-  const progress = idx / (route.geometry.length - 1);
+  const progress = routePosition / (route.geometry.length - 1);
   const remainingMin = Math.max(1, Math.round(route.durationMin * (1 - progress)));
   const remainingKm = (route.distanceKm * (1 - progress)).toFixed(1);
   // Riders plan against a clock, not a duration.
