@@ -25,14 +25,16 @@ jest.mock('../../src/lib/useLocation', () => ({
   useLocation: () => mockLocation,
 }));
 
-jest.mock('../../src/data/useHazards', () => ({
-  useHazards: () => ({
-    hazards: jest.requireActual('../../src/data/hazards').HAZARDS,
-    source: 'fixtures',
-    loading: false,
-    reload: jest.fn(),
-  }),
-}));
+jest.mock('../../src/data/useHazards', () => {
+  const { HAZARDS } = jest.requireActual('../../src/data/hazards');
+  return {
+    useHazards: () => ({ hazards: HAZARDS, source: 'fixtures', loading: false, reload: jest.fn() }),
+    useHazard: (id?: string) => ({
+      hazard: HAZARDS.find((h: { id: string }) => h.id === id),
+      loading: false,
+    }),
+  };
+});
 
 const mockAnalyzePhoto = jest.fn();
 const mockSubmitReport = jest.fn();

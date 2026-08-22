@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { Hazard, AIVerdict, HazardReport, LngLat, DangerLevel } from '../data/types';
 import { API_BASE_URL } from './config';
 
@@ -37,10 +38,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-/** React Native's FormData takes a {uri, name, type} object, not a Blob. */
-function photoPart(uri: string, mimeType: string) {
-  const ext = mimeType.split('/')[1] ?? 'jpg';
-  return { uri, name: `hazard.${ext}`, type: mimeType } as unknown as Blob;
+/**
+ * Attach the photo to a multipart body.
+ *
+ * The two platforms disagree about what a file is. React Native's FormData
+ * takes a {uri, name, type} descriptor and streams the file itself; the
+ * browser's ignores that object entirely and sends "[object Object]", which
+ * the API rejects for having no photo field. On web the uri has to be read
+ * into a real Blob first.
+ */
+export async function appendPhoto(
+  form: FormData,
+  uri: string,
+  mimeType: string,
+  isWeb: boolean = Platform.OS === 'web',
+): Promise<void> {
+  const name = `hazard.${mimeType.split('/')[1] ?? 'jpg'}`;
+
+  if (isWeb) {
+    const blob = await (await fetch(uri)).blob();
+    form.append('photo', blob, name);
+    return;
+  }
+
+  form.append('photo', { uri, name, type: mimeType } as unknown as Blob);
 }
 
 export function fetchHazards(): Promise<Hazard[]> {
@@ -52,15 +73,15 @@ export function fetchHealth(): Promise<{ ok: boolean; aiEnabled: boolean }> {
 }
 
 /** Classify a photo without committing a report, so the rider sees it first. */
-export function analyzePhoto(uri: string, mimeType: string): Promise<RemoteVerdict> {
+export async function analyzePhoto(uri: string, mimeType: string): Promise<RemoteVerdict> {
   const form = new FormData();
-  form.append('photo', photoPart(uri, mimeType));
+  await appendPhoto(form, uri, mimeType);
   return request<RemoteVerdict>('/api/analyze', { method: 'POST', body: form });
 }
 
-export function submitReport(input: SubmitReportInput): Promise<HazardReport> {
+export async function submitReport(input: SubmitReportInput): Promise<HazardReport> {
   const form = new FormData();
-  form.append('photo', photoPart(input.uri, input.mimeType));
+  await appendPhoto(form, input.uri, input.mimeType);
   form.append('lng', String(input.at.lng));
   form.append('lat', String(input.at.lat));
   if (input.intent) form.append('intent', input.intent);

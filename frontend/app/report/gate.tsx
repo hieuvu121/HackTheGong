@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MapView from '../../src/map/MapView';
@@ -6,7 +6,7 @@ import { Button } from '../../src/components/Button';
 import { NavButton } from '../../src/components/NavButton';
 import { checkGate, GATE_RADIUS_M } from '../../src/lib/geo';
 import { useLocation } from '../../src/lib/useLocation';
-import { useHazards } from '../../src/data/useHazards';
+import { useHazard } from '../../src/data/useHazards';
 import { colors, radii, spacing, danger } from '../../src/theme/tokens';
 import { useScreenTop, useScreenBottom } from '../../src/theme/insets';
 import { type } from '../../src/theme/type';
@@ -25,11 +25,7 @@ export default function Gate() {
   const { fixHazardId } = useLocalSearchParams<{ fixHazardId?: string }>();
 
   const { status, coord, accuracyM, refresh } = useLocation();
-  const { hazards } = useHazards();
-  const target = useMemo(
-    () => hazards.find((h) => h.id === fixHazardId),
-    [hazards, fixHazardId],
-  );
+  const { hazard: target } = useHazard(fixHazardId);
 
   const gate = coord && target ? checkGate(coord, target.coord) : null;
   const withinRange = gate?.withinRange ?? false;
@@ -96,11 +92,13 @@ export default function Gate() {
         </View>
       )}
 
-      {(status === 'denied' || status === 'unavailable') && (
+      {status !== 'pending' && status !== 'granted' && (
         <Text testID="gate-no-location" style={[type.bodySm, { color: colors.body }]}>
           {status === 'denied'
             ? 'Location permission is off, so this cannot be confirmed. Turn it on in Settings, then try again.'
-            : 'Your location is unavailable right now.'}
+            : status === 'unsupported'
+              ? 'This build has no location module compiled in. Rebuild the app with `npx expo run:ios`.'
+              : 'Your location is unavailable right now.'}
         </Text>
       )}
 

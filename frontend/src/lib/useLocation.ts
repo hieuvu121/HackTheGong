@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
-import * as Location from 'expo-location';
+import type * as LocationTypes from 'expo-location';
 import { LngLat } from '../data/types';
 import { ORIGIN } from '../data/locale';
+import { optionalNativeModule } from './nativeModule';
 
-export type LocationStatus = 'pending' | 'granted' | 'denied' | 'unavailable';
+// Loaded lazily: see optionalNativeModule. A dev build compiled before
+// expo-location was added would otherwise crash the router on import.
+const Location = optionalNativeModule<typeof LocationTypes>(() => require('expo-location'));
+
+export type LocationStatus =
+  | 'pending'
+  | 'granted'
+  | 'denied'
+  /** The device could not produce a fix. */
+  | 'unavailable'
+  /** This build has no location module compiled in — it needs rebuilding. */
+  | 'unsupported';
 
 export interface LocationState {
   status: LocationStatus;
@@ -25,6 +37,12 @@ export function useLocation(): LocationState {
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!Location) {
+      setStatus('unsupported');
+      setCoord(ORIGIN);
+      return;
+    }
+
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {

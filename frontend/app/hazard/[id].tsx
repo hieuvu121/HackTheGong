@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MapView from '../../src/map/MapView';
-import { useHazards } from '../../src/data/useHazards';
+import { useHazard } from '../../src/data/useHazards';
 import { KIND_LABEL } from '../../src/data/types';
 import { DangerBadge } from '../../src/components/DangerBadge';
 import { PhotoCarousel } from '../../src/components/PhotoCarousel';
@@ -17,19 +17,34 @@ export default function Hazard() {
   const screenTop = useScreenTop();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { hazards } = useHazards();
-  const hazard = hazards.find((h) => h.id === id);
+  const { hazard, loading } = useHazard(id);
 
-  if (!hazard) {
+  // "Not found" is only true once the list has actually arrived. Saying it
+  // while the fetch is still in flight told riders a hazard was gone when the
+  // app simply had not loaded it yet.
+  if (!hazard && loading) {
     return (
-      <View style={[styles.root, { paddingTop: screenTop }]}>
-        <Text style={[type.bodyMd, { color: colors.body }]}>That hazard no longer exists.</Text>
+      <View testID="hazard-loading" style={[styles.root, styles.center, { paddingTop: screenTop }]}>
+        <ActivityIndicator color={colors.ink} />
       </View>
     );
   }
 
-  const latest = hazard.reports[hazard.reports.length - 1];
-  const reportedDays = Math.round((Date.now() - Date.parse(latest.reportedAt)) / 86_400_000);
+  if (!hazard) {
+    return (
+      <View style={[styles.root, styles.center, { paddingTop: screenTop }]}>
+        <Text style={[type.bodyMd, { color: colors.body }]}>That hazard no longer exists.</Text>
+        <Button label="Back to the map" variant="subtle" onPress={() => router.back()} />
+      </View>
+    );
+  }
+
+  // A hazard can exist with no reports yet — one seeded from the map, or a pin
+  // whose photos have been removed. Everything below has to survive that.
+  const latest = hazard.reports.at(-1);
+  const reportedDays = latest
+    ? Math.round((Date.now() - Date.parse(latest.reportedAt)) / 86_400_000)
+    : null;
 
   return (
     <ScrollView
@@ -40,7 +55,9 @@ export default function Hazard() {
         <View style={{ flex: 1 }}>
           <Text style={[type.displayMd, { color: colors.ink }]}>{KIND_LABEL[hazard.kind]}</Text>
           <Text style={[type.bodySm, { color: colors.body }]}>
-            {`${hazard.streetName} · last updated ${reportedDays}d ago`}
+            {reportedDays === null
+              ? hazard.streetName
+              : `${hazard.streetName} · last updated ${reportedDays}d ago`}
           </Text>
         </View>
         <NavButton testID="hazard-close" kind="close" onPress={() => router.back()} />
@@ -78,16 +95,24 @@ export default function Hazard() {
         </View>
       )}
 
-      <Text style={[type.bodyMd, { color: colors.ink }]}>{latest.ai.caption}</Text>
+      {latest && (
+        <Text style={[type.bodyMd, { color: colors.ink }]}>{latest.ai.caption}</Text>
+      )}
 
       <View>
         <Text style={[type.bodyMdStrong, { color: colors.ink, marginBottom: spacing.xxs }]}>
-          {`Reported by ${hazard.reports.length} ${hazard.reports.length === 1 ? 'rider' : 'riders'}`}
+          {hazard.reports.length === 0
+            ? 'No photos yet'
+            : `Reported by ${hazard.reports.length} ${
+                hazard.reports.length === 1 ? 'rider' : 'riders'
+              }`}
         </Text>
         <Text style={[type.bodySm, { color: colors.body }]}>
-          Every photo submitted here, newest first. Judge it for yourself.
+          {hazard.reports.length === 0
+            ? 'Nobody has photographed this one. Add the first photo if you ride past it.'
+            : 'Every photo submitted here, newest first. Judge it for yourself.'}
         </Text>
-        <PhotoCarousel reports={hazard.reports} />
+        {hazard.reports.length > 0 && <PhotoCarousel reports={hazard.reports} />}
       </View>
 
       <Button
@@ -101,6 +126,7 @@ export default function Hazard() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas, paddingHorizontal: spacing.lg },
+  center: { alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   locator: {
     height: 150,
