@@ -1,5 +1,18 @@
 import { Transform } from 'class-transformer';
-import { IsIn, IsLatitude, IsLongitude, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import { HAZARD_KINDS } from '../ai/verdict';
+import { HazardKind } from '../hazards/hazard.entity';
+import { VerdictSource } from './report.entity';
 
 const toNumber = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? Number(value) : value;
@@ -32,6 +45,35 @@ export class CreateReportDto {
   @IsString()
   @MaxLength(120)
   streetName?: string;
+
+  /**
+   * The verdict the rider actually approved, sent back from the analysis
+   * screen.
+   *
+   * Without these the server had to re-read the photo on submit — a second
+   * billed call that could disagree with what the rider had just seen, and
+   * that silently overwrote any correction they had made to it.
+   */
+  @IsOptional()
+  @IsIn(HAZARD_KINDS)
+  kind?: HazardKind;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  caption?: string;
+
+  @Transform(toNumber)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  confidence?: number;
+
+  /** Named apart from `source` so it never collides with a form field. */
+  @IsOptional()
+  @IsIn(['openai', 'fallback', 'rider'])
+  verdictSource?: VerdictSource;
 
   /** A rider override of the model's rating, applied to the saved report. */
   @IsOptional()

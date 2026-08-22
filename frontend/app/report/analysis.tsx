@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  Pressable,
+  TextInput,
+  ScrollView,
+  ActivityIndicator,
+  StyleSheet,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../src/components/Button';
 import { NavButton } from '../../src/components/NavButton';
@@ -8,12 +17,14 @@ import { DangerBadge } from '../../src/components/DangerBadge';
 import { ConfidenceMeter } from '../../src/components/ConfidenceMeter';
 import { analyzePhoto, submitReport, RemoteVerdict } from '../../src/api/client';
 import { useLocation } from '../../src/lib/useLocation';
-import { DangerLevel, KIND_LABEL } from '../../src/data/types';
+import { DangerLevel, HazardKind, KIND_LABEL } from '../../src/data/types';
 import { colors, radii, spacing, danger } from '../../src/theme/tokens';
 import { useScreenTop, useScreenBottom } from '../../src/theme/insets';
 import { type } from '../../src/theme/type';
 
 const LEVELS: DangerLevel[] = ['dangerous', 'moderate', 'low'];
+const KINDS = Object.keys(KIND_LABEL) as HazardKind[];
+const CAPTION_LIMIT = 160;
 
 export default function Analysis() {
   const screenTop = useScreenTop();
@@ -29,8 +40,16 @@ export default function Analysis() {
   const { coord } = useLocation();
   const [verdict, setVerdict] = useState<RemoteVerdict | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Each override is null until the rider touches it, so "unchanged" stays
+  // distinguishable from "changed back to what the model said".
   const [level, setLevel] = useState<DangerLevel | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [kind, setKind] = useState<HazardKind | null>(null);
+  const [caption, setCaption] = useState<string | null>(null);
+
+  const [editingLevel, setEditingLevel] = useState(false);
+  const [editingKind, setEditingKind] = useState(false);
+  const [editingCaption, setEditingCaption] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -67,8 +86,14 @@ export default function Analysis() {
     );
   }
 
-  const shown = level ?? verdict?.dangerLevel ?? 'moderate';
-  const overridden = level !== null && level !== verdict?.dangerLevel;
+  const shownLevel = level ?? verdict?.dangerLevel ?? 'moderate';
+  const shownKind = kind ?? verdict?.kind ?? 'construction';
+  const shownCaption = caption ?? verdict?.caption ?? '';
+
+  const edited =
+    (level !== null && level !== verdict?.dangerLevel) ||
+    (kind !== null && kind !== verdict?.kind) ||
+    (caption !== null && caption.trim() !== verdict?.caption);
 
   const submit = async () => {
     setSubmitting(true);
@@ -80,7 +105,12 @@ export default function Analysis() {
         at: coord ?? { lng: 0, lat: 0 },
         intent: fixHazardId ? 'fix' : 'report',
         hazardId: fixHazardId,
-        dangerLevel: shown,
+        kind: shownKind,
+        caption: shownCaption.trim(),
+        dangerLevel: shownLevel,
+        confidence: verdict?.confidence ?? 0,
+        // A corrected verdict is the rider's, whatever produced the draft.
+        verdictSource: edited ? 'rider' : (verdict?.source ?? 'fallback'),
       });
       router.push(`/report/done${fixHazardId ? `?fixHazardId=${fixHazardId}` : ''}`);
     } catch (e) {
@@ -96,66 +126,136 @@ export default function Analysis() {
         <Text style={[type.displaySm, { color: colors.ink, flex: 1 }]}>Here’s what we found</Text>
       </View>
 
-      <Image testID="verdict" source={{ uri }} style={styles.photo} resizeMode="cover" />
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Image testID="verdict" source={{ uri }} style={styles.photo} resizeMode="cover" />
 
-      {verdict ? (
-        <>
-          <Text style={[type.displaySm, { color: colors.ink }]}>{KIND_LABEL[verdict.kind]}</Text>
-
-          {editing ? (
-            <View testID="rating-picker" style={styles.picker}>
-              {LEVELS.map((l) => {
-                const on = l === shown;
-                return (
+        {verdict ? (
+          <>
+            {editingKind ? (
+              <View testID="kind-picker" style={styles.picker}>
+                {KINDS.map((k) => (
                   <Pressable
-                    key={l}
-                    testID={`rate-${l}`}
+                    key={k}
+                    testID={`kind-${k}`}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: on }}
+                    accessibilityState={{ selected: k === shownKind }}
                     onPress={() => {
-                      setLevel(l);
-                      setEditing(false);
+                      setKind(k);
+                      setEditingKind(false);
                     }}
-                    style={[styles.option, on && { borderColor: danger[l].color, borderWidth: 2 }]}
+                    style={[
+                      styles.option,
+                      k === shownKind && { borderColor: colors.ink, borderWidth: 2 },
+                    ]}
                   >
-                    <View style={[styles.dot, { backgroundColor: danger[l].color }]} />
-                    <Text style={[type.bodyMdStrong, { color: colors.ink }]}>
-                      {danger[l].label}
-                    </Text>
+                    <Text style={[type.bodyMdStrong, { color: colors.ink }]}>{KIND_LABEL[k]}</Text>
                   </Pressable>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.badgeRow}>
-              <DangerBadge level={shown} />
-              {overridden && (
-                <Text style={[type.caption, { color: colors.body }]}>Changed by you</Text>
-              )}
-            </View>
-          )}
+                ))}
+              </View>
+            ) : (
+              <Pressable
+                testID="change-kind"
+                accessibilityRole="button"
+                accessibilityLabel="Change the hazard type"
+                onPress={() => setEditingKind(true)}
+                style={styles.kindRow}
+              >
+                <Text style={[type.displaySm, { color: colors.ink, flex: 1 }]}>
+                  {KIND_LABEL[shownKind]}
+                </Text>
+                <Text style={[type.bodySmStrong, { color: colors.body }]}>Change</Text>
+              </Pressable>
+            )}
 
-          <ConfidenceMeter
-            testID="confidence"
-            confidence={verdict.confidence}
-            source={verdict.source}
-          />
+            {editingLevel ? (
+              <View testID="rating-picker" style={styles.picker}>
+                {LEVELS.map((l) => {
+                  const on = l === shownLevel;
+                  return (
+                    <Pressable
+                      key={l}
+                      testID={`rate-${l}`}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                      onPress={() => {
+                        setLevel(l);
+                        setEditingLevel(false);
+                      }}
+                      style={[styles.option, on && { borderColor: danger[l].color, borderWidth: 2 }]}
+                    >
+                      <View style={[styles.dot, { backgroundColor: danger[l].color }]} />
+                      <Text style={[type.bodyMdStrong, { color: colors.ink }]}>
+                        {danger[l].label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.badgeRow}>
+                <DangerBadge level={shownLevel} />
+                {edited && <Text style={[type.caption, { color: colors.body }]}>Changed by you</Text>}
+              </View>
+            )}
 
-          <Text style={[type.bodyMd, { color: colors.ink }]}>{verdict.caption}</Text>
-        </>
-      ) : (
-        <Text style={[type.bodyMd, { color: colors.ink }]}>
-          The photo is saved, but it could not be read. Rate it yourself and submit.
-        </Text>
-      )}
+            <ConfidenceMeter
+              testID="confidence"
+              confidence={verdict.confidence}
+              source={edited ? 'rider' : verdict.source}
+            />
 
-      {error && (
-        <Text testID="analysis-error" style={[type.bodySm, { color: danger.dangerous.color }]}>
-          {error}
-        </Text>
-      )}
+            {/* The rider was there and the model was not. When it misreads the
+                photo, the description is the part other riders actually read. */}
+            {editingCaption ? (
+              <View style={{ gap: spacing.xs }}>
+                <TextInput
+                  testID="caption-input"
+                  accessibilityLabel="Hazard description"
+                  value={shownCaption}
+                  onChangeText={setCaption}
+                  onBlur={() => setEditingCaption(false)}
+                  multiline
+                  autoFocus
+                  maxLength={CAPTION_LIMIT}
+                  placeholder="Describe what a rider needs to watch out for."
+                  placeholderTextColor={colors.body}
+                  style={[type.bodyMd, styles.input]}
+                />
+                <Text style={[type.caption, { color: colors.body, textAlign: 'right' }]}>
+                  {`${shownCaption.length}/${CAPTION_LIMIT}`}
+                </Text>
+              </View>
+            ) : (
+              <Pressable
+                testID="change-caption"
+                accessibilityRole="button"
+                accessibilityLabel="Edit the description"
+                onPress={() => setEditingCaption(true)}
+                style={styles.captionRow}
+              >
+                <Text style={[type.bodyMd, { color: colors.ink, flex: 1 }]}>
+                  {shownCaption || 'Describe what a rider needs to watch out for.'}
+                </Text>
+                <Text style={[type.bodySmStrong, { color: colors.body }]}>Edit</Text>
+              </Pressable>
+            )}
+          </>
+        ) : (
+          <Text style={[type.bodyMd, { color: colors.ink }]}>
+            The photo is saved, but it could not be read. Rate it yourself and submit.
+          </Text>
+        )}
 
-      <View style={{ flex: 1 }} />
+        {error && (
+          <Text testID="analysis-error" style={[type.bodySm, { color: danger.dangerous.color }]}>
+            {error}
+          </Text>
+        )}
+      </ScrollView>
 
       <View style={{ gap: spacing.md }}>
         <Button
@@ -167,9 +267,9 @@ export default function Analysis() {
         />
         <Button
           testID="change-rating"
-          label={editing ? 'Keep this rating' : 'Change the rating'}
+          label={editingLevel ? 'Keep this rating' : 'Change the rating'}
           variant="subtle"
-          onPress={() => setEditing((v) => !v)}
+          onPress={() => setEditingLevel((v) => !v)}
         />
       </View>
     </View>
@@ -183,6 +283,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
+  scroll: { gap: spacing.md, paddingBottom: spacing.lg },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   center: { alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
   photo: {
@@ -190,6 +291,23 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     backgroundColor: colors.canvasSoft,
     marginVertical: spacing.sm,
+  },
+  kindRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 44 },
+  captionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    minHeight: 44,
+  },
+  input: {
+    color: colors.ink,
+    backgroundColor: colors.canvasSoft,
+    borderRadius: radii.lg,
+    borderWidth: 2,
+    borderColor: colors.ink,
+    padding: spacing.md,
+    minHeight: 88,
+    textAlignVertical: 'top',
   },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   picker: { gap: spacing.sm },

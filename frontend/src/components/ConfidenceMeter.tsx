@@ -2,11 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, radii, spacing } from '../theme/tokens';
 import { type } from '../theme/type';
+import { VerdictSource } from '../data/types';
 
 interface Props {
   /** 0..1, self-reported by the model. */
   confidence: number;
-  source: 'openai' | 'fallback';
+  source: VerdictSource;
   testID?: string;
 }
 
@@ -15,9 +16,21 @@ interface Props {
  *
  * Labelled as the model's own estimate on purpose: it is not a calibrated
  * probability, and a rider deciding whether to trust a rating deserves to know
- * the difference. A fallback verdict says so outright rather than showing 0%.
+ * the difference. A fallback verdict says so outright rather than showing 0%,
+ * and a rider's own correction is never shown under a model's score.
  */
 export function ConfidenceMeter({ confidence, source, testID }: Props) {
+  if (source === 'rider') {
+    return (
+      <View testID={testID} style={styles.wrap}>
+        <Text style={[type.bodySmStrong, { color: colors.ink }]}>Your description</Text>
+        <Text style={[type.caption, { color: colors.body }]}>
+          You corrected what the model said. Riders will see this as your words, not its.
+        </Text>
+      </View>
+    );
+  }
+
   if (source === 'fallback') {
     return (
       <View testID={testID} style={styles.wrap}>

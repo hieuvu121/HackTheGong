@@ -31,6 +31,31 @@ export class ReportsService {
   }
 
   /**
+   * The verdict to file this report under.
+   *
+   * The app analyses the photo before submitting, shows the result, and lets
+   * the rider correct it — so by the time it arrives here the verdict is
+   * already settled, and re-reading the photo would be a second billed call
+   * that could disagree with what the rider approved and quietly overwrite
+   * their correction. Any other caller sends no verdict and still gets one.
+   */
+  private async settleVerdict(dto: CreateReportDto, photo: UploadedPhoto): Promise<Verdict> {
+    if (dto.kind && dto.caption) {
+      return {
+        kind: dto.kind,
+        dangerLevel: dto.dangerLevel ?? 'moderate',
+        confidence: dto.confidence ?? 0,
+        caption: dto.caption,
+        source: dto.verdictSource ?? 'rider',
+      };
+    }
+
+    const verdict = await this.ai.analyze(photo.buffer, photo.mimetype);
+    // A rider who corrected the rating outranks the model.
+    return { ...verdict, dangerLevel: dto.dangerLevel ?? verdict.dangerLevel };
+  }
+
+  /**
    * Store a photo, classify it, and attach it to a hazard — an existing one
    * when the rider is confirming or standing on top of one, a new pin
    * otherwise. The photo is saved before anything else, so a model failure
@@ -42,7 +67,7 @@ export class ReportsService {
     // Disk first: a model outage must not cost the rider the photo they stood
     // in the road to take.
     const filename = await this.photos.save(photo.buffer, photo.mimetype);
-    const verdict = await this.ai.analyze(photo.buffer, photo.mimetype);
+    const verdict = await this.settleVerdict(dto, photo);
     const at = { lng: dto.lng, lat: dto.lat };
     const intent = dto.intent ?? 'report';
 
@@ -64,8 +89,7 @@ export class ReportsService {
       lng: dto.lng,
       lat: dto.lat,
       aiKind: verdict.kind,
-      // A rider who corrected the rating outranks the model.
-      aiDangerLevel: dto.dangerLevel ?? verdict.dangerLevel,
+      aiDangerLevel: verdict.dangerLevel,
       aiConfidence: verdict.confidence,
       aiCaption: verdict.caption,
       aiSource: verdict.source,

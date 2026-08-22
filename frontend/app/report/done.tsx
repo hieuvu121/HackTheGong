@@ -2,12 +2,14 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../src/components/Button';
+import { useHazards } from '../../src/data/useHazards';
 import { colors, radii, spacing } from '../../src/theme/tokens';
 import { type } from '../../src/theme/type';
 
 export default function Done() {
   const router = useRouter();
   const { fixHazardId } = useLocalSearchParams<{ fixHazardId?: string }>();
+  const { reload } = useHazards();
 
   /**
    * Unwind the report flow rather than pushing another map on top of it.
@@ -15,6 +17,11 @@ export default function Done() {
    * re-showed this confirmation, and each report added five stack entries.
    */
   const backToMap = () => {
+    // The hazard list is fetched once and cached for the whole app, so without
+    // this the report just filed is missing from the map until a restart.
+    // Deliberately not awaited: the map renders from the cache immediately and
+    // updates when the fetch lands.
+    void reload();
     if (router.canDismiss?.()) router.dismissAll();
     else router.replace('/');
   };

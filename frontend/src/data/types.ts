@@ -19,12 +19,19 @@ export interface TimeWindow {
   endMin: number;
 }
 
+/**
+ * Where a verdict came from. 'rider' means a person corrected the model —
+ * shown as theirs, never behind a confidence score the model never gave it.
+ */
+export type VerdictSource = 'openai' | 'fallback' | 'rider';
+
 export interface AIVerdict {
   kind: HazardKind;
   dangerLevel: DangerLevel;
   /** 0..1, surfaced to the user so they can check the photo themselves. */
   confidence: number;
   caption: string;
+  source?: VerdictSource;
 }
 
 export interface HazardReport {

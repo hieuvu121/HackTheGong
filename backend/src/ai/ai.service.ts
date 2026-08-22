@@ -27,6 +27,8 @@ export class AiService {
   private readonly log = new Logger(AiService.name);
   private readonly client: OpenAI | null;
   private readonly model: string;
+  /** Resolved once — a key does not become valid between requests. */
+  private keyCheck: Promise<string | null> | null = null;
 
   constructor(private readonly config: ConfigService) {
     const key = this.config.get<string | null>('openaiApiKey');
@@ -42,6 +44,29 @@ export class AiService {
 
   get enabled(): boolean {
     return this.client !== null;
+  }
+
+  /**
+   * Ask the provider whether the key is actually good for anything.
+   *
+   * `enabled` only says a key was configured, which is why a revoked one could
+   * sit behind a healthy-looking /api/health while every single report came
+   * back as a fallback. Returns the reason it is unusable, or null when it
+   * works. Cached: this is called per health check, not per request.
+   */
+  async verifyKey(): Promise<string | null> {
+    if (!this.client) return 'No OPENAI_API_KEY configured.';
+    if (this.keyCheck) return this.keyCheck;
+
+    this.keyCheck = this.client.models
+      .list()
+      .then(() => null)
+      .catch((err: Error) => {
+        this.log.error(`OPENAI_API_KEY rejected: ${err.message}`);
+        return err.message;
+      });
+
+    return this.keyCheck;
   }
 
   /**

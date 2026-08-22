@@ -181,6 +181,87 @@ describe('Photo analysis', () => {
     );
   });
 
+  it('lets the rider rewrite a description the model got wrong', async () => {
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('change-caption'));
+    await fireEvent.changeText(
+      screen.getByTestId('caption-input'),
+      'Gravel washed across the path after the storm.',
+    );
+
+    expect(screen.getByDisplayValue('Gravel washed across the path after the storm.')).toBeTruthy();
+  });
+
+  it('lets the rider correct the hazard type', async () => {
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('change-kind'));
+    await fireEvent.press(screen.getByTestId('kind-pothole'));
+
+    expect(screen.getByText('Pothole / broken surface')).toBeTruthy();
+    expect(screen.queryByTestId('kind-picker')).toBeNull();
+  });
+
+  it('stops crediting the model once the rider has rewritten it', async () => {
+    // Showing a rider's own sentence under "84% model confidence" would be a
+    // straightforward lie about where the words came from.
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('change-caption'));
+    await fireEvent.changeText(screen.getByTestId('caption-input'), 'Loose gravel on the bend.');
+
+    expect(screen.getByText('Your description')).toBeTruthy();
+    expect(screen.queryByText('84%')).toBeNull();
+  });
+
+  it('submits the rider’s corrections, not the model’s draft', async () => {
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    mockSubmitReport.mockResolvedValue({ id: 'rp-new' });
+
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('change-kind'));
+    await fireEvent.press(screen.getByTestId('kind-debris'));
+    await fireEvent.press(screen.getByTestId('change-caption'));
+    await fireEvent.changeText(screen.getByTestId('caption-input'), 'Branch down across the lane.');
+    await fireEvent.press(screen.getByTestId('submit-report'));
+
+    await waitFor(() => expect(mockSubmitReport).toHaveBeenCalled());
+    expect(mockSubmitReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'debris',
+        caption: 'Branch down across the lane.',
+        verdictSource: 'rider',
+      }),
+    );
+  });
+
+  it('credits the model when the rider changed nothing', async () => {
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    mockSubmitReport.mockResolvedValue({ id: 'rp-new' });
+
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('submit-report'));
+
+    await waitFor(() => expect(mockSubmitReport).toHaveBeenCalled());
+    expect(mockSubmitReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'construction',
+        caption: 'Barriers across the bike lane.',
+        verdictSource: 'openai',
+      }),
+    );
+  });
+
   it('keeps the rider on the screen when submitting fails', async () => {
     mockAnalyzePhoto.mockResolvedValue(verdict);
     mockSubmitReport.mockRejectedValue(new Error('Network request failed'));
