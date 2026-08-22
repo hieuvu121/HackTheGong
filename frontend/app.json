@@ -10,7 +10,20 @@
     "newArchEnabled": true,
     "plugins": [
       "expo-router",
-      "@maplibre/maplibre-react-native"
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CycleSafe uses your photo library so you can attach a photo of a hazard you already took.",
+          "cameraPermission": "CycleSafe uses the camera so you can photograph a hazard for other riders."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "CycleSafe uses your location to route you and to confirm you are at the hazard you are reporting."
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,

@@ -6,6 +6,20 @@ A UI draft: real screens, real navigation, real logic. Hazard, route and place d
 
 ## Running it
 
+The app needs the API for reporting. Start it first:
+
+```bash
+cd ../backend && npm install && cp .env.example .env && npm run dev
+```
+
+See [../backend/README.md](../backend/README.md). Without it the map falls back
+to bundled fixtures and the report flow cannot submit — `src/data/useHazards.ts`
+says which source you are looking at.
+
+**Point the app at the API** with `EXPO_PUBLIC_API_URL` if it isn't on
+`localhost:3000`. On a simulator the default works; on a physical phone the app
+reuses the LAN address Metro is already serving from.
+
 ### iOS (primary target)
 
 ```bash
@@ -71,7 +85,7 @@ Useful for fast iteration — no native build, instant reload.
 ### Tests
 
 ```bash
-npm test          # 95 tests
+npm test          # 154 tests
 npx tsc --noEmit  # typecheck
 ```
 
@@ -89,16 +103,43 @@ docs/superpowers/  spec and implementation plan
 
 ## Things worth knowing before you change anything
 
-**The map is platform-split.** `MapView.web.tsx` uses `maplibre-gl`; `MapView.native.tsx` uses `@maplibre/maplibre-react-native`. Both load the same Positron style and declare the same layer ids and paint expressions, so the map looks identical on both. Screens import `src/map/MapView` and never know which they got.
+**The map is platform-split.** `MapView.web.tsx` uses `maplibre-gl`; `MapView.native.tsx` uses `@maplibre/maplibre-react-native`. Both load the same Positron style and declare the same route and user-location layer ids and paint expressions, so the map looks identical on both. Screens import `src/map/MapView` and never know which they got.
+
+**Hazard pins are React views, not map layers.** A circle layer cannot host a glyph or an animation, so each hazard is a marker wrapping `HazardPin` — native via `Marker`, web via a `maplibregl.Marker` with the same component portalled into its element. Two markers, one component, identical output.
+
+**The radar ping cannot use `Animated.delay`.** `RadarPing` staggers its rings by holding each ring's own value with a same-driver `timing`. `Animated.delay` hardcodes `useNativeDriver: false`, and mixing drivers inside one sequence silently stops the whole animation — the rings render at their resting size and never move, which looks like a styling bug rather than an animation one.
+
+**A hazard whose newest report is a fix goes dotted, not away.** `hazardPinState` reads the last report's intent: `fix` means "might be done", drawn hollow and dotted in amber while still routing as a hazard. Only `status: 'fixed'` retires it, and retired hazards are filtered out of the map entirely rather than drawn in a third style.
 
 **`maplibre-gl` is pinned to v5 deliberately.** v6 is ESM-only with a separate module worker that Metro cannot emit. The symptom is nasty: the map renders its chrome, fetches the style and sprite, and then silently loads zero tiles with no error anywhere. Do not upgrade without confirming tiles actually appear.
 
 **Hazards are time-aware.** An unlit road is only a hazard inside its `activeWindow`, so route hazard counts change with departure time. The "Leaving now ▾" chip on the map toggles to 21:00 to demo this.
 
-**Reports are GPS-gated.** Submission is hard-blocked outside 75m of the hazard, with a live distance readout. `report/gate` has a simulate button so both states are demoable.
+**Photos are real, and so is the classification.** `report/capture` takes a
+photo or attaches one from the library (`expo-image-picker`), `POST /api/analyze`
+classifies it, and `POST /api/reports` stores photo, position and verdict in
+SQLite. The confidence shown is the model's own estimate — labelled as such,
+because it is not a calibrated probability.
+
+**The GPS gate only guards the fix flow.** A new report is filed wherever the
+rider is standing, so there is nothing to check it against: the photo and its
+coordinates are the evidence. Marking someone else's hazard fixed is the case
+that needs proof of presence, and that check uses a real fix from
+`expo-location` — there is no way to fake it from inside the app. Submission is hard-blocked outside 75m of the hazard, and the gate runs first — checking after the photo meant a blocked rider had already taken one. The screen draws the radius on a map rather than only asserting it in copy. `report/gate` has a simulate button, marked as demo scaffolding, so both states are demoable.
+
+**Nothing pushes where it should replace.** Choosing a destination replaces the search modal, finishing a report calls `dismissAll`, and onboarding replaces itself with the map. Pushing left the search modal under the whole ride flow, and put a second map on top of the report stack — Android back then re-showed "Report submitted". Every screen that isn't the map also draws its own `NavButton`, because headers are off globally.
+
+**"Safest" is only claimed when it's true.** Two routes carrying the same hazards are not distinguishable on safety, so `isStrictlySafest` awards the badge only to a strictly lowest score; ties fall back to "Recommended". This flips with departure time — after 19:00 the unlit hazard levels two of the three routes.
+
+**Onboarding runs on first launch and teaches the pin language.** `src/lib/firstRun.ts` is session-scoped, not persisted: there is no storage layer, so it resets on a cold start rather than pretending otherwise.
+
+**Three token colours deviate from DESIGN.md, for contrast.** `mute`, `danger.moderate` and `danger.low` are darkened; at the documented values a white pin glyph sat at 2.03:1 and placeholder text at 2.19:1. `tokens.test.ts` holds every safety colour to 3:1 under a white glyph.
 
 **`ios/` and `android/` are generated** by prebuild and gitignored. Never edit them by hand — change `app.json` and re-run.
 
 ## Not built
 
-Backend, auth, real AI inference, live directions, offline maps, background GPS, voice guidance. "Report incorrect" and "Change the rating" render but do nothing. Android is untested — no SDK on the dev machine.
+Auth, live directions, offline maps, background GPS, voice guidance. Route
+planning still reads the bundled fixtures — `ROUTES` references fixture hazard
+ids, so routing and the live hazard list cannot be mixed until routing moves
+server-side. Onboarding names the permissions it wants but never requests them. Android is untested — no SDK on the dev machine.

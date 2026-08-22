@@ -15,7 +15,7 @@ export const type = {
   bodyMdStrong: { fontFamily: text, fontSize: 16, fontWeight: '500', lineHeight: 20 },
   bodySm: { fontFamily: text, fontSize: 14, fontWeight: '400', lineHeight: 20 },
   bodySmStrong: { fontFamily: text, fontSize: 14, fontWeight: '500', lineHeight: 16 },
-  caption: { fontFamily: text, fontSize: 12, fontWeight: '400', lineHeight: 20 },
+  caption: { fontFamily: text, fontSize: 12, fontWeight: '400', lineHeight: 16 },
   buttonLarge: { fontFamily: text, fontSize: 18, fontWeight: '500', lineHeight: 24 },
   buttonMd: { fontFamily: text, fontSize: 16, fontWeight: '500', lineHeight: 20 },
 } satisfies Record<string, TextStyle>;

@@ -18,9 +18,20 @@ Web-only work needs just Node and npm.
 ```bash
 cd frontend
 npm install
+
+# The API the app reports to
+cd ../backend
+npm install
+cp .env.example .env    # add OPENAI_API_KEY, or leave blank to run without it
 ```
 
 ## 2. Run
+
+Start the API first, in its own terminal:
+
+```bash
+cd backend && npm run dev      # http://localhost:3000
+```
 
 ### Web — fastest way in
 
@@ -43,6 +54,14 @@ First build takes several minutes. After that:
 npm start   # then press i
 ```
 
+**Native modules changed — rebuild before running on iOS.** `expo-image-picker`
+and `expo-location` were added, so an existing dev build is stale:
+
+```bash
+npx expo prebuild --platform ios
+npx expo run:ios --device "iPhone 17 Pro"
+```
+
 **Expo Go will not work.** The map uses native code Expo Go does not bundle; it crashes on launch with `TurboModuleRegistry.getEnforcing('MLRNCameraModule')`. `npm start` already targets the dev build (`--dev-client`) — if a header ever says `› Using Expo Go`, press `s` to switch.
 
 ### Android
@@ -52,7 +71,7 @@ Untested — no SDK on the dev machine. `npx expo run:android` should work in pr
 ## 3. Verify
 
 ```bash
-npm test          # 95 tests
+npm test          # 154 tests (plus 11 in backend/)
 npx tsc --noEmit  # typecheck
 ```
 

@@ -1,4 +1,4 @@
-import { activeHazardsForRoute, countByLevel, safestRouteId } from '../scoring';
+import { activeHazardsForRoute, countByLevel, safestRouteId, hazardScore, isStrictlySafest } from '../scoring';
 import { HAZARDS } from '../../data/hazards';
 import { ROUTES } from '../../data/routes';
 
@@ -49,5 +49,30 @@ describe('safestRouteId', () => {
     const a = { ...ROUTES[0], id: 'a', hazardIds: [], durationMin: 30 };
     const b = { ...ROUTES[1], id: 'b', hazardIds: [], durationMin: 20 };
     expect(safestRouteId([a, b], HAZARDS, noon)).toBe('b');
+  });
+});
+
+describe('isStrictlySafest', () => {
+  const day = new Date('2026-08-22T09:00:00');
+  const night = new Date('2026-08-22T21:00:00');
+
+  it('crowns the one route that is genuinely lowest by day', () => {
+    const winners = ROUTES.filter((r) => isStrictlySafest(r, ROUTES, HAZARDS, day));
+    expect(winners.map((r) => r.id)).toEqual(['rt-safe']);
+  });
+
+  it('crowns nobody after dark, when two routes tie', () => {
+    // The unlit hazard switches on at 19:00 and levels rt-safe with
+    // rt-balanced. A rider cannot tell them apart on safety, so neither should
+    // claim to be safest.
+    expect(hazardScore(ROUTES[0], HAZARDS, night)).toBe(hazardScore(ROUTES[1], HAZARDS, night));
+    const winners = ROUTES.filter((r) => isStrictlySafest(r, ROUTES, HAZARDS, night));
+    expect(winners).toHaveLength(0);
+  });
+
+  it('scores the hazardous route far above the calm ones', () => {
+    const fast = ROUTES.find((r) => r.id === 'rt-fast')!;
+    const safe = ROUTES.find((r) => r.id === 'rt-safe')!;
+    expect(hazardScore(fast, HAZARDS, day)).toBeGreaterThan(hazardScore(safe, HAZARDS, day));
   });
 });

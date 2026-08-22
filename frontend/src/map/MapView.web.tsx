@@ -1,11 +1,15 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 // v5 (not v6): v5 ships a UMD bundle with an inlined worker. v6 is ESM-only
 // with a separate module worker that Metro cannot emit, which silently breaks
 // tile loading. Do not upgrade without re-verifying tiles actually render.
-import maplibregl, { MapLayerMouseEvent } from 'maplibre-gl';
+import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapViewProps, STYLE_URL } from './types';
-import { hazardFeatureCollection, routeFeature, pointFeatureCollection } from './geojson';
+import { routeFeature, pointFeatureCollection, circleFeatureCollection } from './geojson';
+import { HazardPin } from '../components/HazardPin';
+import { hazardPinState } from '../lib/pins';
+import { Hazard, KIND_LABEL } from '../data/types';
 import { colors } from '../theme/tokens';
 
 export default function MapView(props: MapViewProps) {
@@ -13,6 +17,13 @@ export default function MapView(props: MapViewProps) {
   const map = useRef<maplibregl.Map | null>(null);
   const cb = useRef(props.onHazardPress);
   cb.current = props.onHazardPress;
+
+  // Hazard pins are real React views anchored by maplibre-gl Markers, not
+  // circle layers — a layer cannot host an animated glyph. Markers are created
+  // imperatively, then HazardPin is portalled into each marker's element so
+  // both platforms render the exact same component.
+  const markers = useRef(new Map<string, maplibregl.Marker>());
+  const [slots, setSlots] = useState<{ hazard: Hazard; el: HTMLElement }[]>([]);
 
   useEffect(() => {
     if (!el.current || map.current) return;
@@ -59,6 +70,20 @@ export default function MapView(props: MapViewProps) {
         },
       });
 
+      m.addSource('gate', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      m.addLayer({
+        id: 'gate-fill',
+        type: 'fill',
+        source: 'gate',
+        paint: { 'fill-color': colors.ink, 'fill-opacity': 0.06 },
+      });
+      m.addLayer({
+        id: 'gate-outline',
+        type: 'line',
+        source: 'gate',
+        paint: { 'line-color': colors.ink, 'line-width': 2, 'line-dasharray': [2, 2] },
+      });
+
       m.addSource('user', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       m.addLayer({
         id: 'user-halo',
@@ -77,39 +102,6 @@ export default function MapView(props: MapViewProps) {
           'circle-stroke-color': colors.canvas,
         },
       });
-
-      m.addSource('hazards', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      });
-      m.addLayer({
-        id: 'hazards-halo',
-        type: 'circle',
-        source: 'hazards',
-        paint: { 'circle-radius': 16, 'circle-color': ['get', 'color'], 'circle-opacity': 0.18 },
-      });
-      m.addLayer({
-        id: 'hazards-dot',
-        type: 'circle',
-        source: 'hazards',
-        paint: {
-          'circle-radius': 8,
-          'circle-color': ['get', 'color'],
-          'circle-stroke-width': 3,
-          'circle-stroke-color': colors.canvas,
-        },
-      });
-
-      m.on('click', 'hazards-dot', (e: MapLayerMouseEvent) => {
-        const id = e.features?.[0]?.properties?.id;
-        if (id) cb.current?.(String(id));
-      });
-      m.on('mouseenter', 'hazards-dot', () => {
-        m.getCanvas().style.cursor = 'pointer';
-      });
-      m.on('mouseleave', 'hazards-dot', () => {
-        m.getCanvas().style.cursor = '';
-      });
     });
 
     // RN Web lays the flex parent out after mount, so the map can initialise
@@ -118,8 +110,11 @@ export default function MapView(props: MapViewProps) {
     const ro = new ResizeObserver(() => m.resize());
     ro.observe(el.current);
 
+    const live = markers.current;
     return () => {
       ro.disconnect();
+      live.forEach((marker) => marker.remove());
+      live.clear();
       m.remove();
       map.current = null;
     };
@@ -132,9 +127,6 @@ export default function MapView(props: MapViewProps) {
     if (!m) return;
 
     const apply = () => {
-      const hs = m.getSource('hazards') as maplibregl.GeoJSONSource | undefined;
-      hs?.setData(hazardFeatureCollection(props.hazards ?? []) as never);
-
       const rs = m.getSource('routes') as maplibregl.GeoJSONSource | undefined;
       rs?.setData({
         type: 'FeatureCollection',
@@ -145,11 +137,52 @@ export default function MapView(props: MapViewProps) {
       us?.setData(
         pointFeatureCollection(props.userLocation ? [props.userLocation] : []) as never,
       );
+
+      const gs = m.getSource('gate') as maplibregl.GeoJSONSource | undefined;
+      gs?.setData(
+        (props.gateCircle
+          ? circleFeatureCollection(props.gateCircle.center, props.gateCircle.radiusM)
+          : { type: 'FeatureCollection', features: [] }) as never,
+      );
     };
 
     if (m.isStyleLoaded()) apply();
     else m.once('load', apply);
-  }, [props.hazards, props.routes, props.activeRouteId, props.userLocation]);
+  }, [props.routes, props.activeRouteId, props.userLocation, props.gateCircle]);
+
+  // Reconcile one marker per hazard, reusing the element so the ping animation
+  // is not restarted every time the hazard list is recomputed.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+
+    const live = markers.current;
+    const seen = new Set<string>();
+    const next: { hazard: Hazard; el: HTMLElement }[] = [];
+
+    for (const h of props.hazards ?? []) {
+      seen.add(h.id);
+      let marker = live.get(h.id);
+      if (marker) {
+        marker.setLngLat([h.coord.lng, h.coord.lat]);
+      } else {
+        marker = new maplibregl.Marker({ element: document.createElement('div') })
+          .setLngLat([h.coord.lng, h.coord.lat])
+          .addTo(m);
+        live.set(h.id, marker);
+      }
+      next.push({ hazard: h, el: marker.getElement() });
+    }
+
+    for (const [id, marker] of live) {
+      if (!seen.has(id)) {
+        marker.remove();
+        live.delete(id);
+      }
+    }
+
+    setSlots(next);
+  }, [props.hazards]);
 
   // Follow the camera, or frame a route
   const fitKey = props.fitTo
@@ -172,8 +205,9 @@ export default function MapView(props: MapViewProps) {
     }
 
     // Without follow, center/zoom are the initial view (set in the
-    // constructor) — re-applying them here would undo the rider's pinch.
-    if (!props.follow) return;
+    // constructor) — re-applying them here would undo the rider's pinch. The
+    // locate button is the one exception, and it says so by bumping the nonce.
+    if (!props.follow && !props.recenterNonce) return;
 
     m.easeTo({
       center: [props.center.lng, props.center.lat],
@@ -182,7 +216,31 @@ export default function MapView(props: MapViewProps) {
       duration: 600,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.center.lng, props.center.lat, props.zoom, props.followBearing, props.follow, fitKey]);
+  }, [
+    props.center.lng,
+    props.center.lat,
+    props.zoom,
+    props.followBearing,
+    props.follow,
+    props.recenterNonce,
+    fitKey,
+  ]);
 
-  return <div ref={el} style={{ position: 'absolute', inset: 0, ...(props.style as object) }} />;
+  return (
+    <>
+      <div ref={el} style={{ position: 'absolute', inset: 0, ...(props.style as object) }} />
+      {slots.map(({ hazard, el: host }) =>
+        createPortal(
+          <HazardPin
+            level={hazard.dangerLevel}
+            state={hazardPinState(hazard)}
+            label={`${KIND_LABEL[hazard.kind]} on ${hazard.streetName}`}
+            onPress={() => cb.current?.(hazard.id)}
+          />,
+          host,
+          hazard.id,
+        ),
+      )}
+    </>
+  );
 }

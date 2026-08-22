@@ -9,6 +9,16 @@ export default function Done() {
   const router = useRouter();
   const { fixHazardId } = useLocalSearchParams<{ fixHazardId?: string }>();
 
+  /**
+   * Unwind the report flow rather than pushing another map on top of it.
+   * Pushing left the whole flow underneath, so Android back from the "new" map
+   * re-showed this confirmation, and each report added five stack entries.
+   */
+  const backToMap = () => {
+    if (router.canDismiss?.()) router.dismissAll();
+    else router.replace('/');
+  };
+
   return (
     <View style={[styles.root, styles.center]}>
       <View style={styles.mark}>
@@ -25,10 +35,11 @@ export default function Done() {
       </Text>
 
       <Button
+        testID="back-to-map"
         label="Back to map"
         variant="large"
         style={{ marginTop: spacing.xl, alignSelf: 'stretch' }}
-        onPress={() => router.push('/')}
+        onPress={backToMap}
       />
     </View>
   );

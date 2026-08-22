@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, View, Text, StyleSheet } from 'react-native';
-import { colors, radii, shadows, danger } from '../theme/tokens';
+import { RadarPing } from './RadarPing';
+import { colors, radii, shadows } from '../theme/tokens';
 import { type } from '../theme/type';
 
 interface Props {
@@ -8,16 +9,23 @@ interface Props {
   testID?: string;
 }
 
-const SIZE = 68;
-const HALO = 92;
+const SIZE = 60;
+const HALO = 78;
 
 /**
- * Floating report button. Red is a deliberate exception to DESIGN.md's
- * black-only CTA rule, requested so reporting reads as urgent from the map.
+ * Floating report button.
+ *
+ * Black, not red: red is the hazard language, and a compose button pulsing in
+ * the same hue gave the map two unrelated meanings in one colour. The ping is
+ * deliberately quieter than a hazard pin's too — the hazards are the content,
+ * this is just the tool for adding one.
  */
 export function ReportFab({ onPress, testID }: Props) {
   return (
     <View style={styles.wrap} pointerEvents="box-none">
+      <View style={styles.pingSlot} pointerEvents="none">
+        <RadarPing size={SIZE} color={colors.ink} rings={2} intensity={0.16} durationMs={3400} />
+      </View>
       <View style={styles.halo} pointerEvents="none" />
       <Pressable
         testID={testID}
@@ -39,20 +47,29 @@ export function ReportFab({ onPress, testID }: Props) {
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', justifyContent: 'center' },
+  // The caption sits below the button, so the rings have to be centred on the
+  // button itself rather than on the wrapper.
+  pingSlot: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: SIZE,
+  },
   halo: {
     position: 'absolute',
     width: HALO,
     height: HALO,
     borderRadius: radii.full,
-    backgroundColor: danger.dangerous.color,
-    opacity: 0.16,
+    backgroundColor: colors.ink,
+    opacity: 0.08,
     top: -(HALO - SIZE) / 2,
   },
   fab: {
     width: SIZE,
     height: SIZE,
     borderRadius: radii.full,
-    backgroundColor: danger.dangerous.color,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
@@ -64,8 +81,8 @@ const styles = StyleSheet.create({
   },
   glyph: {
     color: colors.onPrimary,
-    fontSize: 34,
-    lineHeight: 38,
+    fontSize: 30,
+    lineHeight: 34,
     fontWeight: '500',
   },
   caption: {

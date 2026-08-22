@@ -38,3 +38,32 @@ export function pointFeatureCollection(points: LngLat[]) {
     })),
   };
 }
+
+/**
+ * The report geofence, as a polygon. MapLibre has no metric circle primitive,
+ * so the radius is walked out in steps and corrected for latitude.
+ */
+export function circleFeatureCollection(center: LngLat, radiusM: number, steps = 64) {
+  const latM = 111_320;
+  const lngM = latM * Math.cos((center.lat * Math.PI) / 180);
+  const ring: [number, number][] = [];
+
+  for (let i = 0; i <= steps; i += 1) {
+    const angle = (i / steps) * 2 * Math.PI;
+    ring.push([
+      center.lng + ((radiusM * Math.cos(angle)) / lngM),
+      center.lat + ((radiusM * Math.sin(angle)) / latM),
+    ]);
+  }
+
+  return {
+    type: 'FeatureCollection' as const,
+    features: [
+      {
+        type: 'Feature' as const,
+        properties: {},
+        geometry: { type: 'Polygon' as const, coordinates: [ring] },
+      },
+    ],
+  };
+}

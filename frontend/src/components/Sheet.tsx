@@ -9,10 +9,7 @@ interface Props {
 
 export function Sheet({ children, style }: Props) {
   return (
-    <View style={[styles.sheet, shadows.level2, style]}>
-      <View style={styles.grabber} />
-      {children}
-    </View>
+    <View style={[styles.sheet, shadows.level2, style]}>{children}</View>
   );
 }
 
@@ -22,15 +19,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radii.xl,
     borderTopRightRadius: radii.xl,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    // No grab handle: nothing here is draggable, and the affordance is the
+    // first thing a thumb tries.
+    paddingTop: spacing.xl,
     paddingBottom: spacing.xxl,
-  },
-  grabber: {
-    width: 36,
-    height: 4,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfacePressed,
-    alignSelf: 'center',
-    marginBottom: spacing.lg,
   },
 });
