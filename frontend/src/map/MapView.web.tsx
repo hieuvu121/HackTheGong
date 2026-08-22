@@ -213,7 +213,7 @@ export default function MapView(props: MapViewProps) {
       center: [props.center.lng, props.center.lat],
       zoom: props.zoom ?? 14,
       bearing: props.followBearing ?? 0,
-      duration: 600,
+      duration: props.follow ? 100 : 600,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [

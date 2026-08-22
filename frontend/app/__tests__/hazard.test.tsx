@@ -32,8 +32,10 @@ describe('Hazard detail', () => {
   it('shows every report photo from every user, newest first', async () => {
     await render(<Hazard />);
     expect(screen.getByText('Reported by 2 riders')).toBeTruthy();
-    expect(screen.getByTestId('photo-0').props.children).toContain('Dan');
-    expect(screen.getByTestId('photo-1').props.children).toContain('Mia');
+    expect(screen.getByTestId('photo-0').props.source).toBeTruthy();
+    expect(screen.getByTestId('photo-1').props.source).toBeTruthy();
+    expect(screen.getByTestId('reporter-0').props.children).toBe('Dan');
+    expect(screen.getByTestId('reporter-1').props.children).toBe('Mia');
   });
 
   it('routes into the fix flow via the location check, carrying the hazard id', async () => {

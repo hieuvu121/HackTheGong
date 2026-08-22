@@ -44,6 +44,15 @@ describe('Navigation', () => {
     expect(screen.getByText(/km · arrive/).props.children).not.toEqual(before);
   });
 
+  it('moves continuously before reaching the next route checkpoint', async () => {
+    await render(<Navigate />);
+    const before = screen.getByText(/km · arrive/).props.children;
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(screen.getByText(/km · arrive/).props.children).not.toEqual(before);
+  });
+
   it('gives an arrival clock time, not just a duration', async () => {
     await render(<Navigate />);
     expect(screen.getByText(/arrive \d{2}:\d{2}/)).toBeTruthy();
