@@ -58,19 +58,32 @@ export default function Home() {
       />
 
       <View style={[styles.top, { top: screenTop }]}>
-        <Pressable
-          style={[styles.search, shadows.level2]}
-          onPress={() => router.push('/search')}
-        >
-          <Text style={[type.bodyMd, { color: colors.body }]}>Where to?</Text>
-        </Pressable>
-        <TimeChip testID="time-chip" at={departAt} isNow={isNow} onPress={cycleTime} />
+        <View style={[styles.tripCard, shadows.level2]}>
+          <Pressable
+            style={({ pressed }) => [styles.search, pressed && styles.rowPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Search for a destination"
+            onPress={() => router.push('/search')}
+          >
+            <View style={styles.searchIcon} pointerEvents="none">
+              <View style={styles.searchLens} />
+              <View style={styles.searchHandle} />
+            </View>
+            <View style={styles.searchCopy}>
+              <Text style={[type.caption, { color: colors.body }]}>Destination</Text>
+              <Text style={[type.bodyMdStrong, { color: colors.ink }]}>Where to?</Text>
+            </View>
+            <Text style={styles.searchArrow}>›</Text>
+          </Pressable>
+          <View style={styles.divider} />
+          <TimeChip testID="time-chip" at={departAt} isNow={isNow} onPress={cycleTime} />
+        </View>
       </View>
 
-      <View style={[styles.controls, { bottom: screenBottom + 96 }]} pointerEvents="box-none">
+      <View style={[styles.controls, { bottom: screenBottom + 124 }]} pointerEvents="box-none">
         <MapControl
           testID="locate"
-          glyph="◎"
+          kind="locate"
           label="Centre the map on my location"
           onPress={() => setRecenter((n) => n + 1)}
         />
@@ -92,16 +105,45 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: spacing.lg,
     right: spacing.lg,
-    gap: spacing.md,
+  },
+  tripCard: {
+    backgroundColor: colors.canvas,
+    borderRadius: radii.xl,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'stretch',
   },
   search: {
-    backgroundColor: colors.canvas,
-    borderRadius: radii.pill,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    minHeight: 52,
-    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    minHeight: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
   },
+  rowPressed: { backgroundColor: colors.surfacePressed },
+  divider: { width: 1, backgroundColor: colors.canvasSoft, marginVertical: spacing.md },
+  searchIcon: { width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
+  searchLens: {
+    width: 14,
+    height: 14,
+    borderRadius: radii.full,
+    borderWidth: 2,
+    borderColor: colors.ink,
+  },
+  searchHandle: {
+    position: 'absolute',
+    width: 7,
+    height: 2,
+    backgroundColor: colors.ink,
+    transform: [{ rotate: '45deg' }],
+    right: 2,
+    bottom: 4,
+    borderRadius: radii.pill,
+  },
+  searchCopy: { flex: 1 },
+  searchArrow: { color: colors.body, fontSize: 28, lineHeight: 28 },
   controls: {
     position: 'absolute',
     right: spacing.lg,

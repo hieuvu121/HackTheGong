@@ -4,7 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import MapView from '../src/map/MapView';
 import { ManeuverBanner } from '../src/components/ManeuverBanner';
 import { Button } from '../src/components/Button';
-import { MapControl } from '../src/components/MapControl';
+import { ReportFab } from '../src/components/ReportFab';
 import { useGoBack } from '../src/lib/useGoBack';
 import { ROUTES } from '../src/data/routes';
 import { HAZARDS } from '../src/data/hazards';
@@ -113,10 +113,8 @@ export default function Navigate() {
       </View>
 
       <View style={[styles.rideControls, { bottom: 140 }]} pointerEvents="box-none">
-        <MapControl
+        <ReportFab
           testID="report-while-riding"
-          glyph="+"
-          label="Report a hazard here"
           onPress={() => router.push('/report/capture')}
         />
       </View>

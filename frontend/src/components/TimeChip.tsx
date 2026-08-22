@@ -1,6 +1,6 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet } from 'react-native';
-import { colors, radii, spacing, shadows } from '../theme/tokens';
+import { Pressable, View, Text, StyleSheet } from 'react-native';
+import { colors, spacing } from '../theme/tokens';
 import { type } from '../theme/type';
 import { formatDepartureLabel } from '../lib/time';
 
@@ -16,24 +16,29 @@ export function TimeChip({ at, isNow, onPress, testID }: Props) {
     <Pressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityLabel={`Change departure time, ${formatDepartureLabel(at, isNow)}`}
       onPress={onPress}
-      style={[styles.chip, shadows.level3]}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
-      <Text style={[type.bodySmStrong, { color: colors.ink }]}>
-        {formatDepartureLabel(at, isNow)}
-      </Text>
+      <View style={styles.copy}>
+        <Text style={[type.caption, { color: colors.body }]}>Departure</Text>
+        <Text style={[type.bodySmStrong, { color: colors.ink }]}>
+          {formatDepartureLabel(at, isNow)}
+        </Text>
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  chip: {
-    backgroundColor: colors.canvas,
-    borderRadius: radii.pill,
+  row: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    minHeight: 44,
+    minWidth: 122,
+    minHeight: 60,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'flex-start',
   },
+  pressed: { backgroundColor: colors.surfacePressed },
+  copy: { alignItems: 'flex-start' },
 });
