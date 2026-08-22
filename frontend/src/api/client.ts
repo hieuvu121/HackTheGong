@@ -39,13 +39,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Attach the photo to a multipart body.
+ * Read a local file URI into a Blob.
  *
- * The two platforms disagree about what a file is. React Native's FormData
- * takes a {uri, name, type} descriptor and streams the file itself; the
- * browser's ignores that object entirely and sends "[object Object]", which
- * the API rejects for having no photo field. On web the uri has to be read
- * into a real Blob first.
+ * XHR rather than fetch: Expo SDK 54 replaces React Native's fetch with a
+ * spec-compliant one that does not resolve `file://` or `ph://` URIs, while
+ * XHR still does.
+ */
+export function uriToBlob(uri: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.responseType = 'blob';
+    xhr.onload = () => resolve(xhr.response as Blob);
+    xhr.onerror = () => reject(new Error(`Could not read the photo at ${uri}`));
+    xhr.open('GET', uri, true);
+    xhr.send(null);
+  });
+}
+
+/**
+ * Attach the photo to a multipart body, as a Blob on both platforms.
+ *
+ * React Native's own `{uri, name, type}` descriptor is not an option any more:
+ * Expo's fetch encodes multipart itself and understands only strings and
+ * Blobs, so a descriptor throws "Unsupported FormDataPart implementation". A
+ * browser is no better — it flattens the same object to "[object Object]".
+ *
+ * The filename matters as much as the bytes. The encoder reads it off the part
+ * to build content-disposition, and a part without one arrives as a text field
+ * rather than a file, which the API rejects for having no photo at all. A bare
+ * Blob carries no name, so one is attached.
  */
 export async function appendPhoto(
   form: FormData,
@@ -54,14 +76,16 @@ export async function appendPhoto(
   isWeb: boolean = Platform.OS === 'web',
 ): Promise<void> {
   const name = `hazard.${mimeType.split('/')[1] ?? 'jpg'}`;
+  const blob = isWeb ? await (await fetch(uri)).blob() : await uriToBlob(uri);
 
-  if (isWeb) {
-    const blob = await (await fetch(uri)).blob();
-    form.append('photo', blob, name);
-    return;
+  try {
+    Object.defineProperty(blob, 'name', { value: name, configurable: true });
+  } catch {
+    // Some Blob implementations are frozen; the filename argument below still
+    // carries the name on a spec-compliant FormData.
   }
 
-  form.append('photo', { uri, name, type: mimeType } as unknown as Blob);
+  form.append('photo', blob, name);
 }
 
 export function fetchHazards(): Promise<Hazard[]> {

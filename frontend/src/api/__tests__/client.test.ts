@@ -1,46 +1,73 @@
-import { appendPhoto } from '../client';
+import { appendPhoto, uriToBlob } from '../client';
 
 describe('appendPhoto', () => {
   beforeEach(() => (global.fetch as jest.Mock).mockReset());
 
-  it('sends a real Blob on web, because the browser ignores RN file descriptors', async () => {
-    // The bug this covers: a {uri, name, type} object serialises to
-    // "[object Object]" in a browser, and the API rejects the request for
-    // having no photo field at all.
-    const blob = new Blob(['jpeg-bytes'], { type: 'image/jpeg' });
-    (global.fetch as jest.Mock).mockResolvedValue({ blob: async () => blob });
+  it('sends a Blob on web, because a browser flattens RN file descriptors', async () => {
+    // A {uri, name, type} object serialises to "[object Object]" in a browser,
+    // and the API rejects the request for having no photo field.
+    (global.fetch as jest.Mock).mockResolvedValue({
+      blob: async () => new Blob(['jpeg-bytes'], { type: 'image/jpeg' }),
+    });
 
     const form = new FormData();
     await appendPhoto(form, 'blob:http://localhost/abc', 'image/jpeg', true);
 
-    const sent = form.get('photo');
-    expect(sent).toBeInstanceOf(Blob);
-    expect(typeof sent).not.toBe('string');
+    expect(form.get('photo')).toBeInstanceOf(Blob);
   });
 
-  it('names the web upload from its mime type', async () => {
+  it('names the part, or the API sees a text field instead of a file', async () => {
+    // Expo's multipart encoder reads the filename off the part to build
+    // content-disposition; without one multer never registers a file.
     (global.fetch as jest.Mock).mockResolvedValue({
       blob: async () => new Blob(['x'], { type: 'image/png' }),
     });
 
     const form = new FormData();
     await appendPhoto(form, 'blob:http://localhost/abc', 'image/png', true);
-    expect((form.get('photo') as File).name).toBe('hazard.png');
+
+    const part = form.get('photo') as File;
+    expect(part.name).toBe('hazard.png');
   });
 
-  it('passes a uri descriptor through on native, which streams the file itself', async () => {
-    // Node's FormData flattens the descriptor to "[object Object]" — the very
-    // behaviour that broke web — so the call is observed rather than the
-    // stored value. React Native's own FormData keeps the object intact.
-    const form = new FormData();
-    const append = jest.spyOn(form, 'append');
+  it('reads the file over XHR on native, which fetch can no longer do', async () => {
+    // Expo SDK 54's fetch does not resolve file:// URIs, and its encoder
+    // rejects RN's uri descriptor outright.
+    const blob = new Blob(['native-bytes'], { type: 'image/jpeg' });
+    const xhr = {
+      responseType: '',
+      response: blob,
+      onload: () => {},
+      onerror: () => {},
+      open: jest.fn(),
+      send: jest.fn(function (this: { onload: () => void }) {
+        setTimeout(() => this.onload(), 0);
+      }),
+    };
+    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = jest.fn(() => xhr);
 
+    const form = new FormData();
     await appendPhoto(form, 'file:///tmp/a.jpg', 'image/jpeg', false);
 
     expect(global.fetch).not.toHaveBeenCalled();
-    expect(append).toHaveBeenCalledWith(
-      'photo',
-      expect.objectContaining({ uri: 'file:///tmp/a.jpg', type: 'image/jpeg', name: 'hazard.jpeg' }),
-    );
+    expect(xhr.open).toHaveBeenCalledWith('GET', 'file:///tmp/a.jpg', true);
+    expect(form.get('photo')).toBeInstanceOf(Blob);
+    expect((form.get('photo') as File).name).toBe('hazard.jpeg');
+  });
+
+  it('surfaces an unreadable photo rather than uploading nothing', async () => {
+    const xhr = {
+      responseType: '',
+      response: null,
+      onload: () => {},
+      onerror: () => {},
+      open: jest.fn(),
+      send: jest.fn(function (this: { onerror: () => void }) {
+        setTimeout(() => this.onerror(), 0);
+      }),
+    };
+    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = jest.fn(() => xhr);
+
+    await expect(uriToBlob('file:///tmp/missing.jpg')).rejects.toThrow(/Could not read the photo/);
   });
 });
