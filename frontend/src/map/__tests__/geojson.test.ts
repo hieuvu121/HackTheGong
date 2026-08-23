@@ -1,7 +1,9 @@
-import { hazardFeatureCollection, routeFeature, pointFeatureCollection, circleFeatureCollection } from '../geojson';
+import { hazardFeatureCollection, routeFeature, pointFeatureCollection, circleFeatureCollection, unlitRoadCollection } from '../geojson';
 import { haversineMeters } from '../../lib/geo';
 import { HAZARDS } from '../../data/hazards';
 import { ROUTES } from '../../data/routes';
+import { danger } from '../../theme/tokens';
+import { Hazard } from '../../data/types';
 
 describe('hazardFeatureCollection', () => {
   it('emits one point feature per hazard carrying id and tier', () => {
@@ -63,5 +65,58 @@ describe('circleFeatureCollection', () => {
   it('scales with the radius', () => {
     const big = circleFeatureCollection(center, 300).features[0].geometry.coordinates[0];
     expect(haversineMeters(center, { lng: big[0][0], lat: big[0][1] })).toBeCloseTo(300, 0);
+  });
+});
+
+describe('unlitRoadCollection', () => {
+  const road = (over: Partial<Hazard> = {}): Hazard =>
+    ({
+      id: 'hz-night',
+      coord: { lng: 150.8887, lat: -34.4302 },
+      kind: 'unlit',
+      dangerLevel: 'moderate',
+      status: 'active',
+      streetName: 'Cliff Rd',
+      reports: [],
+      ...over,
+    }) as Hazard;
+
+  const night = new Date(2026, 5, 21, 21, 0);
+  const noon = new Date(2026, 5, 21, 12, 0);
+
+  it('draws the stretch of road, not just the point', () => {
+    const fc = unlitRoadCollection([road()], night);
+    expect(fc.features).toHaveLength(1);
+    expect(fc.features[0].geometry.type).toBe('LineString');
+    expect(fc.features[0].geometry.coordinates.length).toBeGreaterThan(1);
+  });
+
+  it('marks the road live once it is dark', () => {
+    expect(unlitRoadCollection([road()], night).features[0].properties.active).toBe(true);
+  });
+
+  /** Still drawn in daylight, so an evening ride can be planned at lunchtime. */
+  it('keeps the road but marks it dormant in daylight', () => {
+    const fc = unlitRoadCollection([road()], noon);
+    expect(fc.features).toHaveLength(1);
+    expect(fc.features[0].properties.active).toBe(false);
+  });
+
+  it('colours it by danger level, the way every other hazard is coloured', () => {
+    expect(unlitRoadCollection([road({ dangerLevel: 'dangerous' })], night).features[0].properties.color)
+      .toBe(danger.dangerous.color);
+  });
+
+  it('draws nothing for hazards that are not unlit roads', () => {
+    const pothole = road({ kind: 'pothole', streetName: 'Cliff Rd' });
+    expect(unlitRoadCollection([pothole], night).features).toHaveLength(0);
+  });
+
+  it('draws nothing for a street with no geometry on file', () => {
+    expect(unlitRoadCollection([road({ streetName: 'Nowhere St' })], night).features).toHaveLength(0);
+  });
+
+  it('drops a road whose hazard has been fixed', () => {
+    expect(unlitRoadCollection([road({ status: 'fixed' })], night).features).toHaveLength(0);
   });
 });

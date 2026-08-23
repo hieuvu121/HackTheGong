@@ -80,8 +80,8 @@ const SEED: SeedHazard[] = [
     dangerLevel: 'moderate',
     status: 'active',
     streetName: 'Cliff Rd',
-    activeWindowStart: 19 * 60,
-    activeWindowEnd: 6 * 60,
+    // No stored window: darkness is worked out from the sun at this position
+    // for the day being planned, and a stamped 19:00 would only contradict it.
     reports: [
       {
         photo: 'unlit.jpg',
@@ -92,6 +92,28 @@ const SEED: SeedHazard[] = [
         dangerLevel: 'moderate',
         confidence: 0.71,
         caption: 'No street lighting along this stretch after dark.',
+      },
+    ],
+  },
+  {
+    // A second dark stretch, further north, so the map shows more than one
+    // road going bold after dusk.
+    lng: 150.8951,
+    lat: -34.4079,
+    kind: 'unlit',
+    dangerLevel: 'dangerous',
+    status: 'active',
+    streetName: 'Squires Way',
+    reports: [
+      {
+        photo: 'unlit.jpg',
+        reporterName: 'Kem',
+        intent: 'report',
+        daysAgo: 8,
+        kind: 'unlit',
+        dangerLevel: 'dangerous',
+        confidence: 0.79,
+        caption: 'Long unlit run past the industrial edge, no lighting either side.',
       },
     ],
   },

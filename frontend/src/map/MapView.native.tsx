@@ -3,7 +3,12 @@ import { StyleSheet } from 'react-native';
 import { Map, Camera, GeoJSONSource, Layer, Marker } from '@maplibre/maplibre-react-native';
 import type { FeatureCollection } from 'geojson';
 import { MapViewProps, STYLE_URL } from './types';
-import { routeFeature, pointFeatureCollection, circleFeatureCollection } from './geojson';
+import {
+  routeFeature,
+  pointFeatureCollection,
+  circleFeatureCollection,
+  unlitRoadCollection,
+} from './geojson';
 import { HazardPin } from '../components/HazardPin';
 import { hazardPinState } from '../lib/pins';
 import { isHazardActiveAt } from '../lib/time';
@@ -22,6 +27,11 @@ export default function MapView(props: MapViewProps) {
         features: (props.routes ?? []).map((r) => routeFeature(r, r.id === props.activeRouteId)),
       }) as FeatureCollection,
     [props.routes, props.activeRouteId],
+  );
+
+  const unlitRoads = useMemo(
+    () => unlitRoadCollection(props.hazards ?? [], props.at ?? new Date()) as FeatureCollection,
+    [props.hazards, props.at],
   );
 
   const gate = useMemo(
@@ -97,6 +107,22 @@ export default function MapView(props: MapViewProps) {
             'line-color': ['case', ['get', 'active'], colors.ink, colors.mute],
             'line-width': ['case', ['get', 'active'], 6, 4],
             'line-opacity': ['case', ['get', 'active'], 1, 0.55],
+          }}
+        />
+      </GeoJSONSource>
+
+      {/* Under the pins, over the routes: the road is context for the pin,
+          not a thing to tap. Bold while the road is actually dark, faint the
+          rest of the day so an evening ride can still be planned at noon. */}
+      <GeoJSONSource id="unlit-roads" data={unlitRoads}>
+        <Layer
+          id="unlit-roads-line"
+          type="line"
+          layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+          paint={{
+            'line-color': ['get', 'color'],
+            'line-width': ['case', ['get', 'active'], 9, 6],
+            'line-opacity': ['case', ['get', 'active'], 0.85, 0.28],
           }}
         />
       </GeoJSONSource>
