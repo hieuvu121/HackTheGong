@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsLatitude,
@@ -83,6 +84,17 @@ export class CreateReportDto {
   @IsOptional()
   @IsIn(['openai', 'fallback', 'rider'])
   verdictSource?: VerdictSource;
+
+  /**
+   * On a fix report, whether the model judged the hazard repaired. Absent
+   * means nothing judged it — never the same as false.
+   */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value === 'true' : value,
+  )
+  @IsOptional()
+  @IsBoolean()
+  fixed?: boolean;
 
   /** A rider override of the model's rating, applied to the saved report. */
   @IsOptional()

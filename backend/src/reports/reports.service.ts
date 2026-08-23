@@ -1,18 +1,27 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Report } from './report.entity';
+import { Report, ReportIntent } from './report.entity';
 import { CreateReportDto } from './create-report.dto';
 import { Hazard } from '../hazards/hazard.entity';
 import { HazardsService } from '../hazards/hazards.service';
 import { AiService } from '../ai/ai.service';
-import { fallbackClearDays, Verdict } from '../ai/verdict';
+import { fallbackClearDays, FixVerdict, Verdict } from '../ai/verdict';
 import { PhotoStorageService } from './photo-storage.service';
 
 export interface UploadedPhoto {
   buffer: Buffer;
   mimetype: string;
 }
+
+/**
+ * Fix reports needed before a hazard comes off the map.
+ *
+ * Two, not one: a hazard retired on a single photo is a hazard any one person
+ * can remove for everybody. The first fix leaves it routed around while the
+ * map reads it as "might be done"; the second is the confirmation.
+ */
+export const FIXES_TO_RETIRE = 2;
 
 @Injectable()
 export class ReportsService {
@@ -29,6 +38,27 @@ export class ReportsService {
 
   analyze(photo: UploadedPhoto): Promise<Verdict> {
     return this.ai.analyze(photo.buffer, photo.mimetype);
+  }
+
+  /**
+   * Check a photo against the hazard it claims to have fixed.
+   *
+   * The hazard's latest description is what the model compares against — asked
+   * in isolation it would call any tidy photo "fixed", including a stretch of
+   * road that never had a hazard on it.
+   */
+  async assessFix(hazardId: string, photo: UploadedPhoto): Promise<FixVerdict> {
+    const hazard = await this.hazards.findOne(hazardId);
+    if (!hazard) throw new NotFoundException(`No hazard with id ${hazardId}`);
+
+    const latest = [...(hazard.reports ?? [])].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+    ).at(-1);
+
+    return this.ai.assessFix(photo.buffer, photo.mimetype, {
+      kind: hazard.kind,
+      caption: latest?.aiCaption ?? '',
+    });
   }
 
   /**
@@ -58,6 +88,25 @@ export class ReportsService {
   }
 
   /**
+   * What to file a fix report under.
+   *
+   * The kind and rating are the hazard's own — a fix photo is evidence about
+   * an existing hazard, not a description of a new one, and inventing a
+   * classification for it put "construction, moderate" on a photo of clear
+   * road. Only the caption and confidence come from the fix check.
+   */
+  private fixVerdict(dto: CreateReportDto, hazard: Hazard): Verdict {
+    return {
+      kind: hazard.kind,
+      dangerLevel: hazard.dangerLevel,
+      confidence: dto.confidence ?? 0,
+      caption: dto.caption ?? 'Reported as fixed.',
+      clearsInDays: hazard.expectedClearDays,
+      source: dto.verdictSource ?? 'rider',
+    };
+  }
+
+  /**
    * Store a photo, classify it, and attach it to a hazard — an existing one
    * when the rider is confirming or standing on top of one, a new pin
    * otherwise. The photo is saved before anything else, so a model failure
@@ -69,7 +118,6 @@ export class ReportsService {
     // Disk first: a model outage must not cost the rider the photo they stood
     // in the road to take.
     const filename = await this.photos.save(photo.buffer, photo.mimetype);
-    const verdict = await this.settleVerdict(dto, photo);
     const at = { lng: dto.lng, lat: dto.lat };
     const intent = dto.intent ?? 'report';
 
@@ -77,6 +125,14 @@ export class ReportsService {
     if (dto.hazardId && !hazard) {
       throw new NotFoundException(`No hazard with id ${dto.hazardId}`);
     }
+
+    // A fix report is answering "is it gone?", not "what is it?" — classifying
+    // the photo would file proof that a pothole was repaired as a fresh
+    // construction hazard, which is exactly what it used to do.
+    const verdict =
+      intent === 'fix' && hazard
+        ? this.fixVerdict(dto, hazard)
+        : await this.settleVerdict(dto, photo);
 
     // No target given: fold into whatever is already pinned here, or open a
     // new pin. Two riders photographing one pothole should not make two.
@@ -94,9 +150,34 @@ export class ReportsService {
       aiDangerLevel: verdict.dangerLevel,
       aiConfidence: verdict.confidence,
       aiCaption: verdict.caption,
+      aiFixed: intent === 'fix' ? (dto.fixed ?? null) : null,
       aiSource: verdict.source,
     });
 
-    return this.reports.save(report);
+    const saved = await this.reports.save(report);
+    await this.retireIfConfirmed(hazard, intent);
+    return saved;
+  }
+
+  /**
+   * Take the hazard off the map once enough riders agree it is gone.
+   *
+   * Only the unbroken run of fixes at the end of the history counts, so a
+   * rider reporting the hazard is still there resets it — one photo of a
+   * patched pothole should not outweigh a later photo of an open one.
+   */
+  private async retireIfConfirmed(hazard: Hazard, intent: ReportIntent): Promise<void> {
+    if (intent !== 'fix' || hazard.status === 'fixed') return;
+
+    let run = 1; // the report just filed
+    for (const previous of [...(hazard.reports ?? [])].reverse()) {
+      if (previous.intent !== 'fix') break;
+      run += 1;
+    }
+
+    if (run < FIXES_TO_RETIRE) return;
+
+    hazard.status = 'fixed';
+    await this.hazards.setStatus(hazard.id, 'fixed');
   }
 }

@@ -11,6 +11,7 @@ import { NavButton } from '../../src/components/NavButton';
 import { useGoBack } from '../../src/lib/useGoBack';
 import { formatWindow } from '../../src/lib/time';
 import { mightBeFixed } from '../../src/lib/staleness';
+import { hazardPinState } from '../../src/lib/pins';
 import { colors, radii, spacing } from '../../src/theme/tokens';
 import { useScreenTop } from '../../src/theme/insets';
 import { type } from '../../src/theme/type';
@@ -49,7 +50,10 @@ export default function Hazard() {
     ? Math.round((Date.now() - Date.parse(latest.reportedAt)) / 86_400_000)
     : null;
 
-  // Nobody has been back in longer than this kind of hazard usually lasts.
+  // Two different "this may be over" signals, and they are not the same claim.
+  // One rider has said it is done; or nobody has said anything for longer than
+  // this kind of hazard usually lasts. Neither retires anything on its own.
+  const unconfirmed = hazard.status !== 'fixed' && hazardPinState(hazard) === 'unconfirmed';
   const stale = mightBeFixed(hazard);
 
   return (
@@ -88,10 +92,21 @@ export default function Hazard() {
         )}
       </View>
 
+      {unconfirmed && (
+        <View testID="might-be-done" style={[styles.note, styles.noteAccent]}>
+          <Text style={[type.bodyMdStrong, { color: colors.ink }]}>
+            One rider says this is done
+          </Text>
+          <Text style={[type.bodySm, { color: colors.body }]}>
+            It stays on the map until someone confirms it. If you ride past, confirm it below.
+          </Text>
+        </View>
+      )}
+
       {/* Nobody has been back in longer than this kind of hazard usually
           lasts. A reason to go and look, not a claim that it is gone — so it
           never changes the rating, the routing, or the pin. */}
-      {stale && (
+      {stale && !unconfirmed && (
         <View testID="stale-note" style={[styles.note, styles.noteAccent]}>
           <Text style={[type.bodyMdStrong, { color: colors.ink }]}>
             {`Nobody has confirmed this in ${stale.daysSince} days`}

@@ -13,6 +13,7 @@ export function toReportDto(report: Report) {
     reportedAt: report.createdAt.toISOString(),
     reporterName: report.reporterName,
     intent: report.intent,
+    fixed: report.aiFixed ?? null,
     ai: {
       kind: report.aiKind,
       dangerLevel: report.aiDangerLevel,

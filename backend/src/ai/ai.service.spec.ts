@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { AiService } from './ai.service';
-import { fallbackClearDays } from './verdict';
+import { fallbackClearDays, fixPrompt } from './verdict';
 
 const configWith = (key: string | null) =>
   ({
@@ -76,5 +76,54 @@ describe('expected clear time', () => {
     // per-kind constant is applied later, by whoever reads the hazard.
     const verdict = await service.analyze(Buffer.from('x'), 'image/jpeg');
     expect(verdict.clearsInDays).toBeNull();
+  });
+});
+
+describe('assessing whether a hazard has been fixed', () => {
+  const context = { kind: 'pothole' as const, caption: 'Deep pothole in the bike lane.' };
+
+  it('asks a different question than hazard classification', () => {
+    // The bug this exists for: a fix photo went through the hazard prompt and
+    // came back classified as a hazard, so a photo of freshly laid tarmac was
+    // reported as construction.
+    expect(fixPrompt(context)).toMatch(/repair|fixed|cleared/i);
+    expect(fixPrompt(context)).toContain('Deep pothole in the bike lane.');
+  });
+
+  it('tells the model what it is comparing against', () => {
+    expect(fixPrompt({ kind: 'debris', caption: 'Branch across the path.' })).toContain(
+      'Branch across the path.',
+    );
+  });
+
+  it('still frames the question when the hazard has no description yet', () => {
+    const prompt = fixPrompt({ kind: 'pothole', caption: '' });
+    expect(prompt).toMatch(/pothole/i);
+    expect(prompt.length).toBeGreaterThan(0);
+  });
+
+  describe('with no model available', () => {
+    const service = new AiService(configWith(null));
+
+    /**
+     * Null, not false. "Not fixed" is a claim, and nothing looked at the photo
+     * — reporting it would warn a rider off a submission on no evidence.
+     */
+    it('leaves the verdict unset rather than claiming the hazard is not fixed', async () => {
+      const verdict = await service.assessFix(Buffer.from('x'), 'image/jpeg', context);
+      expect(verdict.fixed).toBeNull();
+      expect(verdict.source).toBe('fallback');
+    });
+
+    it('gives it zero confidence, because nothing judged it', async () => {
+      const verdict = await service.assessFix(Buffer.from('x'), 'image/jpeg', context);
+      expect(verdict.confidence).toBe(0);
+    });
+
+    it('never throws — a rider must not lose a fix to an outage', async () => {
+      await expect(
+        service.assessFix(Buffer.from('x'), 'image/jpeg', context),
+      ).resolves.toBeDefined();
+    });
   });
 });

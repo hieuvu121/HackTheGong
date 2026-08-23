@@ -1,7 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
-import { DANGER_LEVELS, fallbackClearDays, HAZARD_KINDS, Verdict } from './verdict';
+import {
+  DANGER_LEVELS,
+  fallbackClearDays,
+  FixContext,
+  fixPrompt,
+  FixVerdict,
+  HAZARD_KINDS,
+  Verdict,
+} from './verdict';
 import { DangerLevel, HazardKind } from '../hazards/hazard.entity';
 
 const SYSTEM = `You classify photographs of cycling hazards for a rider safety map.
@@ -29,6 +37,18 @@ const SCHEMA = {
     clearsInDays: { type: ['integer', 'null'], minimum: 1, maximum: 3650 },
   },
   required: ['kind', 'dangerLevel', 'confidence', 'caption', 'clearsInDays'],
+  additionalProperties: false,
+} as const;
+
+/** Strict schema for the fix check — a different question, a different shape. */
+const FIX_SCHEMA = {
+  type: 'object',
+  properties: {
+    fixed: { type: 'boolean' },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    caption: { type: 'string', maxLength: 160 },
+  },
+  required: ['fixed', 'confidence', 'caption'],
   additionalProperties: false,
 } as const;
 
@@ -133,6 +153,67 @@ export class AiService {
       this.log.error(`Photo analysis failed: ${(err as Error).message}`);
       return this.fallback('Could not reach the model — set a rating yourself.');
     }
+  }
+
+  /**
+   * Judge whether a hazard someone reported has since been dealt with.
+   *
+   * Never throws, for the same reason `analyze` does not: a rider who went
+   * back to photograph a repair must not lose that trip to a model outage.
+   */
+  async assessFix(
+    image: Buffer,
+    mimeType: string,
+    context: FixContext,
+  ): Promise<FixVerdict> {
+    if (!this.client) {
+      return this.fixFallback('No model configured — submit if you can see it is done.');
+    }
+
+    try {
+      const dataUrl = `data:${mimeType};base64,${image.toString('base64')}`;
+
+      const response = await this.client.responses.create({
+        model: this.model,
+        input: [
+          { role: 'system', content: fixPrompt(context) },
+          {
+            role: 'user',
+            content: [
+              { type: 'input_text', text: 'Has this been fixed?' },
+              { type: 'input_image', image_url: dataUrl, detail: 'auto' },
+            ],
+          },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'fix_verdict',
+            strict: true,
+            schema: FIX_SCHEMA as unknown as Record<string, unknown>,
+          },
+        },
+      });
+
+      const text = response.output_text;
+      if (!text) return this.fixFallback('The model returned nothing — submit if you can see it.');
+
+      const parsed = JSON.parse(text) as Omit<FixVerdict, 'source'>;
+      return {
+        fixed: Boolean(parsed.fixed),
+        confidence: Math.min(1, Math.max(0, Number(parsed.confidence) || 0)),
+        caption: String(parsed.caption ?? '').slice(0, 160),
+        source: 'openai',
+      };
+    } catch (err) {
+      this.log.error(`Fix check failed: ${(err as Error).message}`);
+      return this.fixFallback('Could not check the photo — submit if you can see it is done.');
+    }
+  }
+
+  /** Unset, not "not fixed": nothing looked, so nothing can be claimed. */
+  private fixFallback(caption: string): FixVerdict {
+    return { fixed: null, confidence: 0, caption, source: 'fallback' };
   }
 
   /** Honest placeholder. Low confidence on purpose: nothing actually looked. */

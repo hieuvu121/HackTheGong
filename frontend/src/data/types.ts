@@ -41,6 +41,11 @@ export interface HazardReport {
   reportedAt: string;
   reporterName: string;
   intent: 'report' | 'fix';
+  /**
+   * On a fix report, whether the model judged the hazard repaired. Null when
+   * nothing read it — never the same as a judgement of "not fixed".
+   */
+  fixed?: boolean | null;
   ai: AIVerdict;
 }
 

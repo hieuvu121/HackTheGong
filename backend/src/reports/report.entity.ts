@@ -63,6 +63,16 @@ export class Report {
   @Column('text')
   aiCaption!: string;
 
+  /**
+   * On a fix report, whether the model judged the hazard actually repaired.
+   *
+   * Null on ordinary reports, and on fix reports no model read — "not fixed"
+   * is a claim, and nothing that never looked gets to make it. Advisory only:
+   * riders retire hazards, this never does.
+   */
+  @Column('boolean', { nullable: true })
+  aiFixed!: boolean | null;
+
   @Column('text', { default: 'fallback' })
   aiSource!: VerdictSource;
 

@@ -61,3 +61,31 @@ describe('the "may already be fixed" note', () => {
     expect(screen.queryByTestId('stale-note')).toBeNull();
   });
 });
+
+describe('a hazard one rider says is done', () => {
+  it('says so, and asks the next rider to confirm', async () => {
+    const h = build({}, 3);
+    h.reports.push({ ...h.reports[0], id: 'rp-2', intent: 'fix', reporterName: 'Tom' });
+    mockHazard = h;
+
+    await render(<Hazard />);
+    expect(screen.getByTestId('might-be-done')).toBeTruthy();
+    expect(screen.getByText(/confirm/i)).toBeTruthy();
+  });
+
+  it('is not shown while every report still says the hazard is there', async () => {
+    mockHazard = build({}, 3);
+    await render(<Hazard />);
+    expect(screen.queryByTestId('might-be-done')).toBeNull();
+  });
+
+  it('gives way to the Fixed tag once the hazard is retired', async () => {
+    const h = build({ status: 'fixed' }, 3);
+    h.reports.push({ ...h.reports[0], id: 'rp-2', intent: 'fix', reporterName: 'Tom' });
+    mockHazard = h;
+
+    await render(<Hazard />);
+    expect(screen.getByText('Fixed')).toBeTruthy();
+    expect(screen.queryByTestId('might-be-done')).toBeNull();
+  });
+});
