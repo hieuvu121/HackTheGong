@@ -9,8 +9,14 @@ import {
 import { DangerLevel, Hazard, HazardKind } from '../hazards/hazard.entity';
 
 export type ReportIntent = 'report' | 'fix';
-/** Where the verdict came from — never hide a fallback behind a real one. */
-export type VerdictSource = 'openai' | 'fallback';
+/**
+ * Where the verdict came from — never hide a fallback behind a real one.
+ *
+ * 'rider' means a person corrected what the model said. Without it, a rider's
+ * own sentence would be rendered as the model's, under a confidence score no
+ * model ever produced for it.
+ */
+export type VerdictSource = 'openai' | 'fallback' | 'rider';
 
 @Entity('reports')
 export class Report {
@@ -56,6 +62,16 @@ export class Report {
 
   @Column('text')
   aiCaption!: string;
+
+  /**
+   * On a fix report, whether the model judged the hazard actually repaired.
+   *
+   * Null on ordinary reports, and on fix reports no model read — "not fixed"
+   * is a claim, and nothing that never looked gets to make it. Advisory only:
+   * riders retire hazards, this never does.
+   */
+  @Column('boolean', { nullable: true })
+  aiFixed!: boolean | null;
 
   @Column('text', { default: 'fallback' })
   aiSource!: VerdictSource;

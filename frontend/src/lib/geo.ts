@@ -42,3 +42,28 @@ export function bearingBetween(a: LngLat, b: LngLat): number {
 export function bearingDelta(from: number, to: number): number {
   return ((((to - from) % 360) + 540) % 360) - 180;
 }
+
+/**
+ * A random point within `radiusM` of `origin`.
+ *
+ * The demo needs somewhere plausible to put a report when the device will not
+ * give up a real fix — a simulator, or a denied permission. Dropping every one
+ * on the origin exactly meant the API's 40m merge radius folded them all into
+ * a single pin, so the second report of a demo never appeared.
+ *
+ * Uniform by area: the radius is scaled by sqrt, without which points crowd
+ * the centre. `rng` is injectable so the spread can be tested.
+ */
+export function scatterNear(origin: LngLat, radiusM: number, rng = Math.random): LngLat {
+  const distance = radiusM * Math.sqrt(rng());
+  const bearing = 2 * Math.PI * rng();
+
+  // Metres per degree: latitude is constant, longitude shrinks toward the poles.
+  const latM = (EARTH_RADIUS_M * Math.PI) / 180;
+  const lngM = latM * Math.cos(toRad(origin.lat));
+
+  return {
+    lng: origin.lng + (distance * Math.sin(bearing)) / lngM,
+    lat: origin.lat + (distance * Math.cos(bearing)) / latM,
+  };
+}

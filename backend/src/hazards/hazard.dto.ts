@@ -13,6 +13,7 @@ export function toReportDto(report: Report) {
     reportedAt: report.createdAt.toISOString(),
     reporterName: report.reporterName,
     intent: report.intent,
+    fixed: report.aiFixed ?? null,
     ai: {
       kind: report.aiKind,
       dangerLevel: report.aiDangerLevel,
@@ -35,6 +36,7 @@ export function toHazardDto(hazard: Hazard) {
     dangerLevel: hazard.dangerLevel,
     status: hazard.status,
     streetName: hazard.streetName,
+    expectedClearDays: hazard.expectedClearDays ?? null,
     activeWindow:
       hazard.activeWindowStart === null || hazard.activeWindowEnd === null
         ? undefined

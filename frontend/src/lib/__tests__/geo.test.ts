@@ -1,4 +1,12 @@
-import { haversineMeters, checkGate, GATE_RADIUS_M, bearingBetween, bearingDelta } from '../geo';
+import {
+  haversineMeters,
+  checkGate,
+  GATE_RADIUS_M,
+  bearingBetween,
+  bearingDelta,
+  scatterNear,
+} from '../geo';
+import { ORIGIN } from '../../data/locale';
 
 const wollongong = { lng: 150.8931, lat: -34.4278 };
 
@@ -71,5 +79,41 @@ describe('bearingDelta', () => {
   it('takes the short way round the wrap', () => {
     expect(bearingDelta(350, 10)).toBe(20);
     expect(bearingDelta(10, 350)).toBe(-20);
+  });
+});
+
+describe('scatterNear', () => {
+  // A fixed sequence stands in for Math.random, so the assertions are about
+  // the maths and not about luck.
+  const rng = (...values: number[]) => {
+    let i = 0;
+    return () => values[i++ % values.length];
+  };
+
+  it('stays inside the radius asked for', () => {
+    for (const pair of [[0, 0], [0.999, 0.999], [0.5, 0.25], [0.01, 0.87]]) {
+      const at = scatterNear(ORIGIN, 1500, rng(...pair));
+      expect(haversineMeters(ORIGIN, at)).toBeLessThanOrEqual(1500);
+    }
+  });
+
+  it('lands somewhere other than the origin', () => {
+    const at = scatterNear(ORIGIN, 1500, rng(0.5, 0.5));
+    expect(haversineMeters(ORIGIN, at)).toBeGreaterThan(0);
+  });
+
+  it('puts successive reports far enough apart to stay separate pins', () => {
+    // The API folds any report within 40m of a hazard into it, so a demo that
+    // scattered too tightly would show one pin however many reports it took.
+    const a = scatterNear(ORIGIN, 1500, rng(0.9, 0.1));
+    const b = scatterNear(ORIGIN, 1500, rng(0.9, 0.6));
+    expect(haversineMeters(a, b)).toBeGreaterThan(40);
+  });
+
+  it('spreads over the disc rather than crowding the centre', () => {
+    // sqrt on the radius is what keeps it uniform by area; without it half the
+    // points would fall in the inner quarter of the circle.
+    const mid = scatterNear(ORIGIN, 1000, rng(0.25, 0));
+    expect(haversineMeters(ORIGIN, mid)).toBeCloseTo(500, 0);
   });
 });

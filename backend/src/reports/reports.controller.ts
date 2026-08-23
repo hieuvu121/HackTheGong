@@ -27,6 +27,25 @@ export class ReportsController {
     return this.reports.analyze({ buffer: photo.buffer, mimetype: photo.mimetype });
   }
 
+  /**
+   * Preview whether a photo shows a hazard repaired.
+   *
+   * Separate from /analyze on purpose: "has this been fixed?" and "what hazard
+   * is this?" are different questions with different answers, and running a
+   * fix photo through the classifier reported fresh tarmac as construction.
+   */
+  @Post('analyze/fix')
+  @UseInterceptors(FileInterceptor('photo', photoUpload()))
+  async analyzeFix(@Body('hazardId') hazardId?: string, @UploadedFile() photo?: Express.Multer.File) {
+    if (!photo) throw new BadRequestException('Attach a photo as the "photo" field.');
+    if (!hazardId) throw new BadRequestException('Say which hazard, as "hazardId".');
+
+    return this.reports.assessFix(hazardId, {
+      buffer: photo.buffer,
+      mimetype: photo.mimetype,
+    });
+  }
+
   @Post('reports')
   @UseInterceptors(FileInterceptor('photo', photoUpload()))
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))

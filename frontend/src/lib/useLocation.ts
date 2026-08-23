@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type * as LocationTypes from 'expo-location';
 import { LngLat } from '../data/types';
 import { ORIGIN } from '../data/locale';
+import { scatterNear } from './geo';
 import { optionalNativeModule } from './nativeModule';
 
 // Loaded lazily: see optionalNativeModule. A dev build compiled before
@@ -15,7 +16,9 @@ export type LocationStatus =
   /** The device could not produce a fix. */
   | 'unavailable'
   /** This build has no location module compiled in — it needs rebuilding. */
-  | 'unsupported';
+  | 'unsupported'
+  /** Synthetic: EXPO_PUBLIC_DEMO_LOCATION is on and the device was not asked. */
+  | 'demo';
 
 export interface LocationState {
   status: LocationStatus;
@@ -24,12 +27,32 @@ export interface LocationState {
   refresh: () => Promise<void>;
 }
 
+/** How far a stand-in position may wander from the demo origin. */
+export const DEMO_SCATTER_M = 1500;
+
+/**
+ * Force every position near the demo origin, ignoring the device entirely.
+ *
+ * For demoing off a simulator, which reports a perfectly valid fix in San
+ * Francisco and drops every report 26,000km off the map. Opt-in on purpose:
+ * this app gates "report as fixed" on the rider standing within 75m of the
+ * hazard, and a synthetic position defeats that check, so it must never turn
+ * itself on. `status` reports 'demo' so no screen can mistake it for a fix.
+ */
+export const usingDemoLocation = (): boolean =>
+  process.env.EXPO_PUBLIC_DEMO_LOCATION === '1' ||
+  process.env.EXPO_PUBLIC_DEMO_LOCATION === 'true';
+
 /**
  * The rider's real position.
  *
- * Falls back to the demo origin only when the device refuses — a simulator
- * with no location set would otherwise leave the report flow dead in the
- * water. `status` always says which of the two you are looking at.
+ * Falls back to a point near the demo origin only when the device refuses — a
+ * simulator with no location set would otherwise leave the report flow dead in
+ * the water. `status` always says which of the two you are looking at.
+ *
+ * Scattered rather than pinned to the origin: the API merges any report within
+ * 40m into the hazard already there, so identical fallbacks made every demo
+ * report after the first vanish into the same pin.
  */
 export function useLocation(): LocationState {
   const [status, setStatus] = useState<LocationStatus>('pending');
@@ -37,9 +60,15 @@ export function useLocation(): LocationState {
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
+    if (usingDemoLocation()) {
+      setStatus('demo');
+      setCoord(scatterNear(ORIGIN, DEMO_SCATTER_M));
+      return;
+    }
+
     if (!Location) {
       setStatus('unsupported');
-      setCoord(ORIGIN);
+      setCoord(scatterNear(ORIGIN, DEMO_SCATTER_M));
       return;
     }
 
@@ -47,7 +76,7 @@ export function useLocation(): LocationState {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
         setStatus('denied');
-        setCoord(ORIGIN);
+        setCoord(scatterNear(ORIGIN, DEMO_SCATTER_M));
         return;
       }
 
@@ -59,7 +88,7 @@ export function useLocation(): LocationState {
       setStatus('granted');
     } catch {
       setStatus('unavailable');
-      setCoord(ORIGIN);
+      setCoord(scatterNear(ORIGIN, DEMO_SCATTER_M));
     }
   }, []);
 

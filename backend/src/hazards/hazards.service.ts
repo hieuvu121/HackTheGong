@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Hazard } from './hazard.entity';
+import { Hazard, HazardStatus } from './hazard.entity';
 import { Verdict } from '../ai/verdict';
 
 /** Two reports of the same pothole should be one pin, not two. */
@@ -46,6 +46,18 @@ export class HazardsService {
     return this.hazards.save(hazard);
   }
 
+  /**
+   * Take a hazard off the map, touching nothing but its status.
+   *
+   * A column update rather than save(): saving a hazard whose `reports` were
+   * loaded before the newest one was inserted makes TypeORM treat that report
+   * as removed from the relation and null its foreign key, which the schema
+   * rejects. Nothing here needs the relation, so nothing here loads it.
+   */
+  async setStatus(id: string, status: HazardStatus): Promise<void> {
+    await this.hazards.update(id, { status });
+  }
+
   /** The closest active hazard within the merge radius, if there is one. */
   async findNearestActive(
     at: { lng: number; lat: number },
@@ -79,6 +91,7 @@ export class HazardsService {
       dangerLevel: verdict.dangerLevel,
       status: 'active',
       streetName,
+      expectedClearDays: verdict.clearsInDays,
       // Unlit roads are the one kind that comes and goes with the clock.
       activeWindowStart: verdict.kind === 'unlit' ? 19 * 60 : null,
       activeWindowEnd: verdict.kind === 'unlit' ? 6 * 60 : null,

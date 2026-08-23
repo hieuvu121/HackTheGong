@@ -1,12 +1,22 @@
 import { Platform } from 'react-native';
-import { Hazard, AIVerdict, HazardReport, LngLat, DangerLevel } from '../data/types';
+import {
+  Hazard,
+  AIVerdict,
+  HazardReport,
+  LngLat,
+  DangerLevel,
+  HazardKind,
+  VerdictSource,
+} from '../data/types';
 import { API_BASE_URL } from './config';
+import { postMultipart } from './upload';
 
-/** Where a verdict came from. A fallback is never dressed up as a real one. */
-export type VerdictSource = 'openai' | 'fallback';
+export type { VerdictSource };
 
 export interface RemoteVerdict extends AIVerdict {
   source: VerdictSource;
+  /** Days until repair; null for kinds that do not simply get fixed. */
+  clearsInDays?: number | null;
 }
 
 export interface SubmitReportInput {
@@ -16,6 +26,19 @@ export interface SubmitReportInput {
   intent?: 'report' | 'fix';
   hazardId?: string;
   reporterName?: string;
+  /**
+   * The verdict the rider approved on the analysis screen, corrections and
+   * all. Sent so the server files this report under what the rider actually
+   * saw, instead of reading the photo a second time and overwriting it.
+   */
+  kind?: HazardKind;
+  caption?: string;
+  confidence?: number;
+  /** Days until repair, for the kinds that get repaired. */
+  clearsInDays?: number | null;
+  /** On a fix report, the model's read on whether it is actually done. */
+  fixed?: boolean | null;
+  verdictSource?: VerdictSource;
   /** A rider override of the model's rating. */
   dangerLevel?: DangerLevel;
 }
@@ -72,11 +95,38 @@ export function fetchHealth(): Promise<{ ok: boolean; aiEnabled: boolean }> {
   return request('/api/health');
 }
 
+/** The model's read on whether a hazard someone reported has been dealt with. */
+export interface FixVerdict {
+  /** Null means nothing judged the photo — not a judgement of "not fixed". */
+  fixed: boolean | null;
+  confidence: number;
+  caption: string;
+  source: VerdictSource;
+}
+
+/**
+ * Ask whether a photo shows a hazard repaired.
+ *
+ * Its own endpoint, not `analyzePhoto`: asking "what hazard is this?" of a
+ * photo of fresh tarmac answered "construction", so a rider's proof that a
+ * pothole was gone got filed as a brand-new hazard.
+ */
+export async function analyzeFix(
+  uri: string,
+  mimeType: string,
+  hazardId: string,
+): Promise<FixVerdict> {
+  const form = new FormData();
+  await appendPhoto(form, uri, mimeType);
+  form.append('hazardId', hazardId);
+  return postMultipart<FixVerdict>('/api/analyze/fix', form);
+}
+
 /** Classify a photo without committing a report, so the rider sees it first. */
 export async function analyzePhoto(uri: string, mimeType: string): Promise<RemoteVerdict> {
   const form = new FormData();
   await appendPhoto(form, uri, mimeType);
-  return request<RemoteVerdict>('/api/analyze', { method: 'POST', body: form });
+  return postMultipart<RemoteVerdict>('/api/analyze', form);
 }
 
 export async function submitReport(input: SubmitReportInput): Promise<HazardReport> {
@@ -88,6 +138,12 @@ export async function submitReport(input: SubmitReportInput): Promise<HazardRepo
   if (input.hazardId) form.append('hazardId', input.hazardId);
   if (input.reporterName) form.append('reporterName', input.reporterName);
   if (input.dangerLevel) form.append('dangerLevel', input.dangerLevel);
+  if (input.kind) form.append('kind', input.kind);
+  if (input.caption) form.append('caption', input.caption);
+  if (input.confidence !== undefined) form.append('confidence', String(input.confidence));
+  if (input.verdictSource) form.append('verdictSource', input.verdictSource);
+  if (input.clearsInDays != null) form.append('clearsInDays', String(input.clearsInDays));
+  if (input.fixed != null) form.append('fixed', String(input.fixed));
 
-  return request<HazardReport>('/api/reports', { method: 'POST', body: form });
+  return postMultipart<HazardReport>('/api/reports', form);
 }

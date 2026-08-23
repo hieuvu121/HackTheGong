@@ -19,12 +19,19 @@ export interface TimeWindow {
   endMin: number;
 }
 
+/**
+ * Where a verdict came from. 'rider' means a person corrected the model —
+ * shown as theirs, never behind a confidence score the model never gave it.
+ */
+export type VerdictSource = 'openai' | 'fallback' | 'rider';
+
 export interface AIVerdict {
   kind: HazardKind;
   dangerLevel: DangerLevel;
   /** 0..1, surfaced to the user so they can check the photo themselves. */
   confidence: number;
   caption: string;
+  source?: VerdictSource;
 }
 
 export interface HazardReport {
@@ -34,6 +41,11 @@ export interface HazardReport {
   reportedAt: string;
   reporterName: string;
   intent: 'report' | 'fix';
+  /**
+   * On a fix report, whether the model judged the hazard repaired. Null when
+   * nothing read it — never the same as a judgement of "not fixed".
+   */
+  fixed?: boolean | null;
   ai: AIVerdict;
 }
 
@@ -47,6 +59,12 @@ export interface Hazard {
   /** Chronological, oldest first. */
   reports: HazardReport[];
   streetName: string;
+  /**
+   * Days this hazard is expected to take to be repaired, as estimated from the
+   * photo. Null for kinds that do not simply get fixed, and for hazards no
+   * model read — a per-kind constant stands in for those. See lib/staleness.
+   */
+  expectedClearDays?: number | null;
 }
 
 export interface ManeuverStep {

@@ -13,12 +13,23 @@ export interface PickedPhoto {
   height: number;
 }
 
-/** Photos are re-encoded to JPEG at 0.7 — a phone original is ~8MB of upload. */
-const OPTIONS: ImagePickerTypes.ImagePickerOptions = {
+/**
+ * Photos are re-encoded to JPEG at 0.7 — a phone original is ~8MB of upload.
+ *
+ * `preferredAssetRepresentationMode: 'compatible'` is what forces the JPEG.
+ * Left to itself an iPhone hands back the library original, which is HEIC:
+ * OpenAI reads only jpeg, png, gif and webp, so every library photo came back
+ * as a fallback verdict, and browsers outside Apple cannot render HEIC either,
+ * so the same photo then showed as broken in the carousel. "Compatible" makes
+ * the picker transcode on the way out.
+ */
+export const OPTIONS: ImagePickerTypes.ImagePickerOptions = {
   mediaTypes: ['images'],
   quality: 0.7,
   allowsEditing: false,
   exif: false,
+  preferredAssetRepresentationMode:
+    'compatible' as ImagePickerTypes.UIImagePickerPreferredAssetRepresentationMode,
 };
 
 function toPicked(result: ImagePickerTypes.ImagePickerResult): PickedPhoto | null {

@@ -1,4 +1,4 @@
-import { appendPhoto } from '../client';
+import { appendPhoto, submitReport } from '../client';
 
 describe('appendPhoto', () => {
   beforeEach(() => (global.fetch as jest.Mock).mockReset());
@@ -42,5 +42,72 @@ describe('appendPhoto', () => {
       'photo',
       expect.objectContaining({ uri: 'file:///tmp/a.jpg', type: 'image/jpeg', name: 'hazard.jpeg' }),
     );
+  });
+});
+
+describe('submitReport', () => {
+  // Uploads go over XHR, not fetch — see src/api/upload.ts.
+  class FakeXHR {
+    static sent: FormData[] = [];
+    status = 200;
+    responseText = '{"id":"rp-new"}';
+    timeout = 0;
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    ontimeout: (() => void) | null = null;
+    open() {}
+    send(body: FormData) {
+      FakeXHR.sent.push(body);
+      // Resolve on the next tick, the way a real request would.
+      setTimeout(() => this.onload?.(), 0);
+    }
+  }
+
+  const base = {
+    uri: 'blob:http://localhost/abc',
+    mimeType: 'image/jpeg',
+    at: { lng: 150.8931, lat: -34.4278 },
+  };
+
+  beforeEach(() => {
+    FakeXHR.sent = [];
+    (global as { XMLHttpRequest?: unknown }).XMLHttpRequest = FakeXHR;
+    // appendPhoto reads the uri back as a Blob on web.
+    (global.fetch as jest.Mock).mockReset();
+    (global.fetch as jest.Mock).mockResolvedValue({
+      blob: async () => new Blob(['jpeg'], { type: 'image/jpeg' }),
+    });
+  });
+
+  it('puts the approved verdict on the wire under the names the API reads', async () => {
+    // A typo in any of these field names fails silently: the API would ignore
+    // the field, re-read the photo, and overwrite the rider's correction.
+    await submitReport({
+      ...base,
+      kind: 'debris',
+      caption: 'Branch down across the lane.',
+      confidence: 0.72,
+      verdictSource: 'rider',
+      dangerLevel: 'dangerous',
+    });
+
+    const [form] = FakeXHR.sent;
+    expect(form.get('kind')).toBe('debris');
+    expect(form.get('caption')).toBe('Branch down across the lane.');
+    expect(form.get('confidence')).toBe('0.72');
+    expect(form.get('verdictSource')).toBe('rider');
+    expect(form.get('dangerLevel')).toBe('dangerous');
+  });
+
+  it('sends a zero confidence rather than dropping it', async () => {
+    // `if (confidence)` would skip 0 — the value a fallback verdict always has.
+    await submitReport({ ...base, kind: 'pothole', caption: 'A hole.', confidence: 0 });
+    expect(FakeXHR.sent[0].get('confidence')).toBe('0');
+  });
+
+  it('omits a verdict the caller did not supply, so the server still analyses', async () => {
+    await submitReport(base);
+    expect(FakeXHR.sent[0].get('kind')).toBeNull();
+    expect(FakeXHR.sent[0].get('caption')).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { AppModule } from './app.module';
-import { seedIfEmpty } from './seed';
+import { seedDemoData } from './seed';
 import { AiService } from './ai/ai.service';
 
 async function bootstrap() {
@@ -15,7 +15,7 @@ async function bootstrap() {
   app.enableCors({ origin: true });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
 
-  await seedIfEmpty(app.get(DataSource));
+  await seedDemoData(app.get(DataSource), config.get<string>('uploadDir')!);
 
   const port = config.get<number>('port')!;
   await app.listen(port, '0.0.0.0');

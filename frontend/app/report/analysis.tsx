@@ -1,19 +1,36 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  Pressable,
+  TextInput,
+  ScrollView,
+  ActivityIndicator,
+  StyleSheet,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Button } from '../../src/components/Button';
 import { NavButton } from '../../src/components/NavButton';
 import { useGoBack } from '../../src/lib/useGoBack';
 import { DangerBadge } from '../../src/components/DangerBadge';
 import { ConfidenceMeter } from '../../src/components/ConfidenceMeter';
-import { analyzePhoto, submitReport, RemoteVerdict } from '../../src/api/client';
+import {
+  analyzePhoto,
+  analyzeFix,
+  submitReport,
+  RemoteVerdict,
+  FixVerdict,
+} from '../../src/api/client';
 import { useLocation } from '../../src/lib/useLocation';
-import { DangerLevel, KIND_LABEL } from '../../src/data/types';
+import { DangerLevel, HazardKind, KIND_LABEL } from '../../src/data/types';
 import { colors, radii, spacing, danger } from '../../src/theme/tokens';
 import { useScreenTop, useScreenBottom } from '../../src/theme/insets';
 import { type } from '../../src/theme/type';
 
 const LEVELS: DangerLevel[] = ['dangerous', 'moderate', 'low'];
+const KINDS = Object.keys(KIND_LABEL) as HazardKind[];
+const CAPTION_LIMIT = 160;
 
 export default function Analysis() {
   const screenTop = useScreenTop();
@@ -27,24 +44,42 @@ export default function Analysis() {
   }>();
 
   const { coord } = useLocation();
+  // Two different questions. "What hazard is this?" for a new report; "has the
+  // hazard someone reported been dealt with?" for a fix. Running a fix photo
+  // through the classifier answered "construction" for a photo of fresh
+  // tarmac, filing proof of a repair as a brand-new hazard.
+  const checkingFix = Boolean(fixHazardId);
   const [verdict, setVerdict] = useState<RemoteVerdict | null>(null);
+  const [fixVerdict, setFixVerdict] = useState<FixVerdict | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Each override is null until the rider touches it, so "unchanged" stays
+  // distinguishable from "changed back to what the model said".
   const [level, setLevel] = useState<DangerLevel | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [kind, setKind] = useState<HazardKind | null>(null);
+  const [caption, setCaption] = useState<string | null>(null);
+
+  const [editingLevel, setEditingLevel] = useState(false);
+  const [editingKind, setEditingKind] = useState(false);
+  const [editingCaption, setEditingCaption] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!uri) return;
     let live = true;
 
-    analyzePhoto(uri, mimeType ?? 'image/jpeg')
-      .then((v) => live && setVerdict(v))
-      .catch((e: Error) => live && setError(e.message));
+    const check = checkingFix
+      ? analyzeFix(uri, mimeType ?? 'image/jpeg', fixHazardId!).then(
+          (v) => live && setFixVerdict(v),
+        )
+      : analyzePhoto(uri, mimeType ?? 'image/jpeg').then((v) => live && setVerdict(v));
+
+    check.catch((e: Error) => live && setError(e.message));
 
     return () => {
       live = false;
     };
-  }, [uri, mimeType]);
+  }, [uri, mimeType, checkingFix, fixHazardId]);
 
   if (!uri) {
     return (
@@ -55,20 +90,33 @@ export default function Analysis() {
     );
   }
 
-  if (!verdict && !error) {
+  if (!verdict && !fixVerdict && !error) {
     return (
       <View testID="analysing" style={[styles.root, styles.center]}>
         <ActivityIndicator color={colors.ink} />
         <Text style={[type.displaySm, { color: colors.ink }]}>Reading your photo</Text>
         <Text style={[type.bodySm, { color: colors.body, textAlign: 'center' }]}>
-          Classifying the hazard and estimating how risky it is for riders.
+          {checkingFix
+            ? 'Checking it against what riders reported here.'
+            : 'Classifying the hazard and estimating how risky it is for riders.'}
         </Text>
       </View>
     );
   }
 
-  const shown = level ?? verdict?.dangerLevel ?? 'moderate';
-  const overridden = level !== null && level !== verdict?.dangerLevel;
+  const shownLevel = level ?? verdict?.dangerLevel ?? 'moderate';
+  const shownKind = kind ?? verdict?.kind ?? 'construction';
+  const draft = checkingFix ? fixVerdict : verdict;
+  const shownCaption = caption ?? draft?.caption ?? '';
+
+  const edited =
+    (level !== null && level !== verdict?.dangerLevel) ||
+    (kind !== null && kind !== verdict?.kind) ||
+    (caption !== null && caption.trim() !== draft?.caption);
+
+  // Only a judgement counts as disagreement. A fallback verdict judged nothing,
+  // and warning a rider off on no evidence is worse than saying nothing.
+  const modelDisagrees = checkingFix && fixVerdict?.fixed === false;
 
   const submit = async () => {
     setSubmitting(true);
@@ -80,7 +128,20 @@ export default function Analysis() {
         at: coord ?? { lng: 0, lat: 0 },
         intent: fixHazardId ? 'fix' : 'report',
         hazardId: fixHazardId,
-        dangerLevel: shown,
+        caption: shownCaption.trim(),
+        confidence: draft?.confidence ?? 0,
+        // A corrected verdict is the rider's, whatever produced the draft.
+        verdictSource: edited ? 'rider' : (draft?.source ?? 'fallback'),
+        // A fix report carries the model's read on the repair. The kind and
+        // rating are the hazard's own, so the server fills those in.
+        ...(checkingFix
+          ? { fixed: fixVerdict?.fixed ?? null }
+          : {
+              kind: shownKind,
+              dangerLevel: shownLevel,
+              // Not rider-editable: a property of the repair, not the report.
+              clearsInDays: verdict?.clearsInDays ?? null,
+            }),
       });
       router.push(`/report/done${fixHazardId ? `?fixHazardId=${fixHazardId}` : ''}`);
     } catch (e) {
@@ -93,69 +154,176 @@ export default function Analysis() {
     <View style={[styles.root, { paddingTop: screenTop, paddingBottom: screenBottom }]}>
       <View style={styles.head}>
         <NavButton testID="analysis-back" kind="back" onPress={goBack} />
-        <Text style={[type.displaySm, { color: colors.ink, flex: 1 }]}>Here’s what we found</Text>
+        <Text style={[type.displaySm, { color: colors.ink, flex: 1 }]}>
+          {checkingFix ? 'Is it done?' : 'Here’s what we found'}
+        </Text>
       </View>
 
-      <Image testID="verdict" source={{ uri }} style={styles.photo} resizeMode="cover" />
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Image testID="verdict" source={{ uri }} style={styles.photo} resizeMode="cover" />
 
-      {verdict ? (
-        <>
-          <Text style={[type.displaySm, { color: colors.ink }]}>{KIND_LABEL[verdict.kind]}</Text>
+        {checkingFix ? (
+          <>
+            <View testID="fix-verdict" style={styles.fixVerdict}>
+              <Text style={[type.displaySm, { color: colors.ink }]}>
+                {fixVerdict?.fixed === true
+                  ? 'Looks fixed'
+                  : fixVerdict?.fixed === false
+                    ? 'Still looks like a hazard'
+                    : 'Not analysed'}
+              </Text>
+              <Text style={[type.bodySm, { color: colors.body }]}>
+                {fixVerdict?.fixed === null || !fixVerdict
+                  ? 'No model read this photo. You were there — submit if you can see it is done.'
+                  : `${Math.round((fixVerdict.confidence ?? 0) * 100)}% confident, from the photo alone.`}
+              </Text>
+            </View>
 
-          {editing ? (
-            <View testID="rating-picker" style={styles.picker}>
-              {LEVELS.map((l) => {
-                const on = l === shown;
-                return (
+            {/* The rider stood there and the model did not, so this warns and
+                never blocks — the button below stays live either way. */}
+            {modelDisagrees && (
+              <View testID="fix-disagreement" style={[styles.fixVerdict, styles.warn]}>
+                <Text style={[type.bodyMdStrong, { color: colors.ink }]}>
+                  This still looks like an active hazard
+                </Text>
+                <Text style={[type.bodySm, { color: colors.body }]}>
+                  Submit anyway if you can see it’s done. Your report still counts.
+                </Text>
+              </View>
+            )}
+          </>
+        ) : verdict ? (
+          <>
+            {editingKind ? (
+              <View testID="kind-picker" style={styles.picker}>
+                {KINDS.map((k) => (
                   <Pressable
-                    key={l}
-                    testID={`rate-${l}`}
+                    key={k}
+                    testID={`kind-${k}`}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: on }}
+                    accessibilityState={{ selected: k === shownKind }}
                     onPress={() => {
-                      setLevel(l);
-                      setEditing(false);
+                      setKind(k);
+                      setEditingKind(false);
                     }}
-                    style={[styles.option, on && { borderColor: danger[l].color, borderWidth: 2 }]}
+                    style={[
+                      styles.option,
+                      k === shownKind && { borderColor: colors.ink, borderWidth: 2 },
+                    ]}
                   >
-                    <View style={[styles.dot, { backgroundColor: danger[l].color }]} />
-                    <Text style={[type.bodyMdStrong, { color: colors.ink }]}>
-                      {danger[l].label}
-                    </Text>
+                    <Text style={[type.bodyMdStrong, { color: colors.ink }]}>{KIND_LABEL[k]}</Text>
                   </Pressable>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.badgeRow}>
-              <DangerBadge level={shown} />
-              {overridden && (
-                <Text style={[type.caption, { color: colors.body }]}>Changed by you</Text>
-              )}
-            </View>
-          )}
+                ))}
+              </View>
+            ) : (
+              <Pressable
+                testID="change-kind"
+                accessibilityRole="button"
+                accessibilityLabel="Change the hazard type"
+                onPress={() => setEditingKind(true)}
+                style={styles.kindRow}
+              >
+                <Text style={[type.displaySm, { color: colors.ink, flex: 1 }]}>
+                  {KIND_LABEL[shownKind]}
+                </Text>
+                <Text style={[type.bodySmStrong, { color: colors.body }]}>Change</Text>
+              </Pressable>
+            )}
 
-          <ConfidenceMeter
-            testID="confidence"
-            confidence={verdict.confidence}
-            source={verdict.source}
-          />
+            {editingLevel ? (
+              <View testID="rating-picker" style={styles.picker}>
+                {LEVELS.map((l) => {
+                  const on = l === shownLevel;
+                  return (
+                    <Pressable
+                      key={l}
+                      testID={`rate-${l}`}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                      onPress={() => {
+                        setLevel(l);
+                        setEditingLevel(false);
+                      }}
+                      style={[styles.option, on && { borderColor: danger[l].color, borderWidth: 2 }]}
+                    >
+                      <View style={[styles.dot, { backgroundColor: danger[l].color }]} />
+                      <Text style={[type.bodyMdStrong, { color: colors.ink }]}>
+                        {danger[l].label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.badgeRow}>
+                <DangerBadge level={shownLevel} />
+                {edited && <Text style={[type.caption, { color: colors.body }]}>Changed by you</Text>}
+              </View>
+            )}
 
-          <Text style={[type.bodyMd, { color: colors.ink }]}>{verdict.caption}</Text>
-        </>
-      ) : (
-        <Text style={[type.bodyMd, { color: colors.ink }]}>
-          The photo is saved, but it could not be read. Rate it yourself and submit.
-        </Text>
-      )}
+            <ConfidenceMeter
+              testID="confidence"
+              confidence={verdict.confidence}
+              source={edited ? 'rider' : verdict.source}
+            />
 
-      {error && (
-        <Text testID="analysis-error" style={[type.bodySm, { color: danger.dangerous.color }]}>
-          {error}
-        </Text>
-      )}
+          </>
+        ) : (
+          <Text style={[type.bodyMd, { color: colors.ink }]}>
+            The photo is saved, but it could not be read. Rate it yourself and submit.
+          </Text>
+        )}
 
-      <View style={{ flex: 1 }} />
+        {(verdict || fixVerdict) && (
+          <>
+            {/* The rider was there and the model was not. When it misreads the
+                photo, the description is the part other riders actually read. */}
+            {editingCaption ? (
+              <View style={{ gap: spacing.xs }}>
+                <TextInput
+                  testID="caption-input"
+                  accessibilityLabel="Hazard description"
+                  value={shownCaption}
+                  onChangeText={setCaption}
+                  onBlur={() => setEditingCaption(false)}
+                  multiline
+                  autoFocus
+                  maxLength={CAPTION_LIMIT}
+                  placeholder="Describe what a rider needs to watch out for."
+                  placeholderTextColor={colors.body}
+                  style={[type.bodyMd, styles.input]}
+                />
+                <Text style={[type.caption, { color: colors.body, textAlign: 'right' }]}>
+                  {`${shownCaption.length}/${CAPTION_LIMIT}`}
+                </Text>
+              </View>
+            ) : (
+              <Pressable
+                testID="change-caption"
+                accessibilityRole="button"
+                accessibilityLabel="Edit the description"
+                onPress={() => setEditingCaption(true)}
+                style={styles.captionRow}
+              >
+                <Text style={[type.bodyMd, { color: colors.ink, flex: 1 }]}>
+                  {shownCaption || 'Describe what a rider needs to watch out for.'}
+                </Text>
+                <Text style={[type.bodySmStrong, { color: colors.body }]}>Edit</Text>
+              </Pressable>
+            )}
+          </>
+        )}
+
+        {error && (
+          <Text testID="analysis-error" style={[type.bodySm, { color: danger.dangerous.color }]}>
+            {error}
+          </Text>
+        )}
+      </ScrollView>
 
       <View style={{ gap: spacing.md }}>
         <Button
@@ -165,12 +333,14 @@ export default function Analysis() {
           disabled={submitting}
           onPress={submit}
         />
-        <Button
-          testID="change-rating"
-          label={editing ? 'Keep this rating' : 'Change the rating'}
-          variant="subtle"
-          onPress={() => setEditing((v) => !v)}
-        />
+        {!checkingFix && (
+          <Button
+            testID="change-rating"
+            label={editingLevel ? 'Keep this rating' : 'Change the rating'}
+            variant="subtle"
+            onPress={() => setEditingLevel((v) => !v)}
+          />
+        )}
       </View>
     </View>
   );
@@ -183,6 +353,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
+  scroll: { gap: spacing.md, paddingBottom: spacing.lg },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   center: { alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
   photo: {
@@ -191,7 +362,33 @@ const styles = StyleSheet.create({
     backgroundColor: colors.canvasSoft,
     marginVertical: spacing.sm,
   },
+  kindRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 44 },
+  captionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    minHeight: 44,
+  },
+  input: {
+    color: colors.ink,
+    backgroundColor: colors.canvasSoft,
+    borderRadius: radii.lg,
+    borderWidth: 2,
+    borderColor: colors.ink,
+    padding: spacing.md,
+    minHeight: 88,
+    textAlignVertical: 'top',
+  },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  fixVerdict: {
+    backgroundColor: colors.canvasSoft,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.xxs,
+  },
+  /* A rule rather than a red fill: this is a caution about the photo, not a
+     danger rating, and the danger colours already mean severity here. */
+  warn: { borderLeftWidth: 3, borderLeftColor: colors.ink },
   picker: { gap: spacing.sm },
   option: {
     flexDirection: 'row',

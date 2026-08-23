@@ -107,6 +107,36 @@ describe('GPS gate', () => {
     await render(<Gate />);
     expect(screen.getByTestId('gate-locating')).toBeTruthy();
   });
+
+  describe('with the demo location override on', () => {
+    // EXPO_PUBLIC_DEMO_LOCATION makes the position synthetic, so there is no
+    // real proximity to check. The gate opens, but says so in as many words —
+    // a bypass nobody can mistake for a passed check.
+    beforeEach(() => {
+      mockLocation.status = 'demo';
+      mockLocation.coord = nudge(4000);
+    });
+
+    it('opens the camera even though the position is nowhere near', async () => {
+      await render(<Gate />);
+      await fireEvent.press(screen.getByTestId('gate-continue'));
+      expect(mockPush).toHaveBeenCalledWith('/report/capture?fixHazardId=hz-1');
+    });
+
+    it('says the check was skipped rather than claiming it passed', async () => {
+      await render(<Gate />);
+      expect(screen.getByTestId('gate-demo')).toBeTruthy();
+      expect(screen.queryByTestId('gate-allowed')).toBeNull();
+      expect(screen.queryByText('Location confirmed')).toBeNull();
+    });
+
+    it('is off unless the override is, so a real rider is still checked', async () => {
+      mockLocation.status = 'granted';
+      await render(<Gate />);
+      expect(screen.queryByTestId('gate-demo')).toBeNull();
+      expect(screen.getByTestId('gate-blocked')).toBeTruthy();
+    });
+  });
 });
 
 describe('Photo analysis', () => {
@@ -177,6 +207,87 @@ describe('Photo analysis', () => {
         at: { lng: 150.9, lat: -34.42 },
         dangerLevel: 'dangerous',
         intent: 'report',
+      }),
+    );
+  });
+
+  it('lets the rider rewrite a description the model got wrong', async () => {
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('change-caption'));
+    await fireEvent.changeText(
+      screen.getByTestId('caption-input'),
+      'Gravel washed across the path after the storm.',
+    );
+
+    expect(screen.getByDisplayValue('Gravel washed across the path after the storm.')).toBeTruthy();
+  });
+
+  it('lets the rider correct the hazard type', async () => {
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('change-kind'));
+    await fireEvent.press(screen.getByTestId('kind-pothole'));
+
+    expect(screen.getByText('Pothole / broken surface')).toBeTruthy();
+    expect(screen.queryByTestId('kind-picker')).toBeNull();
+  });
+
+  it('stops crediting the model once the rider has rewritten it', async () => {
+    // Showing a rider's own sentence under "84% model confidence" would be a
+    // straightforward lie about where the words came from.
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('change-caption'));
+    await fireEvent.changeText(screen.getByTestId('caption-input'), 'Loose gravel on the bend.');
+
+    expect(screen.getByText('Your description')).toBeTruthy();
+    expect(screen.queryByText('84%')).toBeNull();
+  });
+
+  it('submits the rider’s corrections, not the model’s draft', async () => {
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    mockSubmitReport.mockResolvedValue({ id: 'rp-new' });
+
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('change-kind'));
+    await fireEvent.press(screen.getByTestId('kind-debris'));
+    await fireEvent.press(screen.getByTestId('change-caption'));
+    await fireEvent.changeText(screen.getByTestId('caption-input'), 'Branch down across the lane.');
+    await fireEvent.press(screen.getByTestId('submit-report'));
+
+    await waitFor(() => expect(mockSubmitReport).toHaveBeenCalled());
+    expect(mockSubmitReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'debris',
+        caption: 'Branch down across the lane.',
+        verdictSource: 'rider',
+      }),
+    );
+  });
+
+  it('credits the model when the rider changed nothing', async () => {
+    mockAnalyzePhoto.mockResolvedValue(verdict);
+    mockSubmitReport.mockResolvedValue({ id: 'rp-new' });
+
+    await render(<Analysis />);
+    await waitFor(() => expect(screen.getByTestId('verdict')).toBeTruthy());
+    await fireEvent.press(screen.getByTestId('submit-report'));
+
+    await waitFor(() => expect(mockSubmitReport).toHaveBeenCalled());
+    expect(mockSubmitReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'construction',
+        caption: 'Barriers across the bike lane.',
+        verdictSource: 'openai',
       }),
     );
   });
