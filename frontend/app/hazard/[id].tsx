@@ -10,6 +10,7 @@ import { Button } from '../../src/components/Button';
 import { NavButton } from '../../src/components/NavButton';
 import { useGoBack } from '../../src/lib/useGoBack';
 import { formatWindow } from '../../src/lib/time';
+import { mightBeFixed } from '../../src/lib/staleness';
 import { colors, radii, spacing } from '../../src/theme/tokens';
 import { useScreenTop } from '../../src/theme/insets';
 import { type } from '../../src/theme/type';
@@ -48,6 +49,9 @@ export default function Hazard() {
     ? Math.round((Date.now() - Date.parse(latest.reportedAt)) / 86_400_000)
     : null;
 
+  // Nobody has been back in longer than this kind of hazard usually lasts.
+  const stale = mightBeFixed(hazard);
+
   return (
     <ScrollView
       style={[styles.root, { paddingTop: screenTop }]}
@@ -83,6 +87,20 @@ export default function Hazard() {
           </View>
         )}
       </View>
+
+      {/* Nobody has been back in longer than this kind of hazard usually
+          lasts. A reason to go and look, not a claim that it is gone — so it
+          never changes the rating, the routing, or the pin. */}
+      {stale && (
+        <View testID="stale-note" style={[styles.note, styles.noteAccent]}>
+          <Text style={[type.bodyMdStrong, { color: colors.ink }]}>
+            {`Nobody has confirmed this in ${stale.daysSince} days`}
+          </Text>
+          <Text style={[type.bodySm, { color: colors.body }]}>
+            {`${KIND_LABEL[hazard.kind]} like this usually clears in about ${stale.clearDays} days, so it may already be fixed. Worth a look if you ride past.`}
+          </Text>
+        </View>
+      )}
 
       {/* The routing engine only counts this hazard inside its window, so the
           rider needs to see the window too. */}
@@ -148,5 +166,17 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     padding: spacing.lg,
     gap: 2,
+  },
+  note: {
+    backgroundColor: colors.canvasSoft,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: 2,
+  },
+  /* A left rule rather than a colour fill: the danger colours already mean
+     severity on this screen, and a coloured panel here would read as one. */
+  noteAccent: {
+    borderLeftWidth: 3,
+    borderLeftColor: colors.ink,
   },
 });

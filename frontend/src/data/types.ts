@@ -54,6 +54,12 @@ export interface Hazard {
   /** Chronological, oldest first. */
   reports: HazardReport[];
   streetName: string;
+  /**
+   * Days this hazard is expected to take to be repaired, as estimated from the
+   * photo. Null for kinds that do not simply get fixed, and for hazards no
+   * model read — a per-kind constant stands in for those. See lib/staleness.
+   */
+  expectedClearDays?: number | null;
 }
 
 export interface ManeuverStep {

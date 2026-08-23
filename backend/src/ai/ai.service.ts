@@ -1,13 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
-import { DANGER_LEVELS, HAZARD_KINDS, Verdict } from './verdict';
+import { DANGER_LEVELS, fallbackClearDays, HAZARD_KINDS, Verdict } from './verdict';
 import { DangerLevel, HazardKind } from '../hazards/hazard.entity';
 
 const SYSTEM = `You classify photographs of cycling hazards for a rider safety map.
 Judge only what is visible. Rate danger from the perspective of someone riding a
 bicycle past this spot. Be conservative: if the photo does not clearly show a
-hazard, say so in the caption and give a low confidence.`;
+hazard, say so in the caption and give a low confidence.
+
+For clearsInDays, estimate how many days this specific hazard is likely to take
+to be repaired, judging from what the photo shows — the scale of the works, how
+far along they look, how big the damage is. Answer only for potholes and
+construction, which are waiting on a repair. Everything else is null: an unlit
+road or a road with no shoulder is not maintenance pending and does not clear
+on its own.`;
 
 /** Strict Structured Outputs schema — the model cannot return anything else. */
 const SCHEMA = {
@@ -17,8 +24,11 @@ const SCHEMA = {
     dangerLevel: { type: 'string', enum: DANGER_LEVELS },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     caption: { type: 'string', maxLength: 160 },
+    // Nullable rather than optional: strict mode requires every property, so
+    // "no estimate" has to be expressible as a value.
+    clearsInDays: { type: ['integer', 'null'], minimum: 1, maximum: 3650 },
   },
-  required: ['kind', 'dangerLevel', 'confidence', 'caption'],
+  required: ['kind', 'dangerLevel', 'confidence', 'caption', 'clearsInDays'],
   additionalProperties: false,
 } as const;
 
@@ -109,11 +119,14 @@ export class AiService {
       if (!text) return this.fallback('The model returned nothing — set a rating yourself.');
 
       const parsed = JSON.parse(text) as Omit<Verdict, 'source'>;
+      const kind = this.coerceKind(parsed.kind);
+
       return {
-        kind: this.coerceKind(parsed.kind),
+        kind,
         dangerLevel: this.coerceLevel(parsed.dangerLevel),
         confidence: Math.min(1, Math.max(0, Number(parsed.confidence) || 0)),
         caption: String(parsed.caption ?? '').slice(0, 160),
+        clearsInDays: this.coerceClearDays(kind, parsed.clearsInDays),
         source: 'openai',
       };
     } catch (err) {
@@ -129,8 +142,24 @@ export class AiService {
       dangerLevel: 'moderate',
       confidence: 0,
       caption,
+      // Nothing read the photo, so there is nothing to estimate from. Whoever
+      // reads the hazard applies the per-kind constant instead.
+      clearsInDays: null,
       source: 'fallback',
     };
+  }
+
+  /**
+   * Keep an estimate only where one can mean something.
+   *
+   * A model asked for null will sometimes answer anyway, and an estimate on a
+   * hazard that does not get repaired would put "it may already be fixed" on a
+   * road that is still unlit.
+   */
+  private coerceClearDays(kind: HazardKind, value: unknown): number | null {
+    if (fallbackClearDays(kind) === null) return null;
+    const days = Math.round(Number(value));
+    return Number.isFinite(days) && days > 0 ? Math.min(days, 3650) : null;
   }
 
   private coerceKind(value: string): HazardKind {

@@ -1,6 +1,7 @@
 import { Transform } from 'class-transformer';
 import {
   IsIn,
+  IsInt,
   IsLatitude,
   IsLongitude,
   IsNumber,
@@ -69,6 +70,14 @@ export class CreateReportDto {
   @Min(0)
   @Max(1)
   confidence?: number;
+
+  /** Days until this is likely repaired; only potholes and construction. */
+  @Transform(toNumber)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  clearsInDays?: number;
 
   /** Named apart from `source` so it never collides with a form field. */
   @IsOptional()

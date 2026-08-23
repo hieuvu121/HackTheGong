@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { AiService } from './ai.service';
+import { fallbackClearDays } from './verdict';
 
 const configWith = (key: string | null) =>
   ({
@@ -44,4 +45,36 @@ describe('AiService with a key', () => {
     const verdict = await service.analyze(Buffer.from('x'), 'image/jpeg');
     expect(verdict.source).toBe('fallback');
   }, 30_000);
+});
+
+describe('expected clear time', () => {
+  const service = new AiService(configWith(null));
+
+  /**
+   * Only two kinds get an estimate. A pothole is patched and construction ends;
+   * an unlit road or a highway with no shoulder is not "maintenance pending",
+   * and telling a rider it might have cleared itself would be a lie.
+   */
+  it('offers a fallback estimate for potholes and construction', () => {
+    expect(fallbackClearDays('pothole')).toBeGreaterThan(0);
+    expect(fallbackClearDays('construction')).toBeGreaterThan(0);
+  });
+
+  it('offers none for hazards that do not simply get repaired', () => {
+    expect(fallbackClearDays('unlit')).toBeNull();
+    expect(fallbackClearDays('highway')).toBeNull();
+    expect(fallbackClearDays('debris')).toBeNull();
+    expect(fallbackClearDays('no_bike_lane')).toBeNull();
+  });
+
+  it('expects construction to outlast a pothole', () => {
+    expect(fallbackClearDays('construction')!).toBeGreaterThan(fallbackClearDays('pothole')!);
+  });
+
+  it('leaves the estimate unset on a fallback verdict, rather than guessing', async () => {
+    // Nothing looked at the photo, so there is nothing to estimate from. The
+    // per-kind constant is applied later, by whoever reads the hazard.
+    const verdict = await service.analyze(Buffer.from('x'), 'image/jpeg');
+    expect(verdict.clearsInDays).toBeNull();
+  });
 });

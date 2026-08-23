@@ -13,6 +13,7 @@ const MODEL_VERDICT: Verdict = {
   dangerLevel: 'moderate',
   confidence: 0.4,
   caption: 'Something is blocking the lane.',
+  clearsInDays: 45,
   source: 'openai',
 };
 
@@ -114,5 +115,40 @@ describe('ReportsService.create without a verdict', () => {
     await service.create({ ...at, dangerLevel: 'low' }, photo);
     expect(saved[0].aiDangerLevel).toBe('low');
     expect(saved[0].aiKind).toBe(MODEL_VERDICT.kind);
+  });
+});
+
+describe('the clear-time estimate on a submitted verdict', () => {
+  it('keeps the estimate the rider’s screen showed', async () => {
+    const { service, hazards } = build();
+    await service.create(
+      { ...at, kind: 'pothole', caption: 'A hole.', clearsInDays: 21 },
+      photo,
+    );
+    expect(hazards.createFromVerdict).toHaveBeenCalledWith(
+      at,
+      expect.objectContaining({ clearsInDays: 21 }),
+      undefined,
+    );
+  });
+
+  it('falls back to the per-kind constant when no model supplied one', async () => {
+    const { service, hazards } = build();
+    await service.create({ ...at, kind: 'construction', caption: 'Works.' }, photo);
+    expect(hazards.createFromVerdict).toHaveBeenCalledWith(
+      at,
+      expect.objectContaining({ clearsInDays: 90 }),
+      undefined,
+    );
+  });
+
+  it('leaves it unset for a kind that does not simply get repaired', async () => {
+    const { service, hazards } = build();
+    await service.create({ ...at, kind: 'unlit', caption: 'No lights.' }, photo);
+    expect(hazards.createFromVerdict).toHaveBeenCalledWith(
+      at,
+      expect.objectContaining({ clearsInDays: null }),
+      undefined,
+    );
   });
 });

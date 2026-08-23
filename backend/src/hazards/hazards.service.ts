@@ -79,6 +79,7 @@ export class HazardsService {
       dangerLevel: verdict.dangerLevel,
       status: 'active',
       streetName,
+      expectedClearDays: verdict.clearsInDays,
       // Unlit roads are the one kind that comes and goes with the clock.
       activeWindowStart: verdict.kind === 'unlit' ? 19 * 60 : null,
       activeWindowEnd: verdict.kind === 'unlit' ? 6 * 60 : null,

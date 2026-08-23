@@ -51,6 +51,14 @@ export class Hazard {
   @Column('integer', { nullable: true })
   activeWindowEnd!: number | null;
 
+  /**
+   * The model's estimate of how long this hazard takes to be repaired, in
+   * days. Null for kinds that do not simply get fixed, and for hazards no
+   * model ever read — the app falls back to a per-kind constant for those.
+   */
+  @Column('integer', { nullable: true })
+  expectedClearDays!: number | null;
+
   @OneToMany(() => Report, (report) => report.hazard)
   reports!: Report[];
 

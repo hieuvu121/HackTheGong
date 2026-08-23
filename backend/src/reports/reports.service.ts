@@ -3,9 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Report } from './report.entity';
 import { CreateReportDto } from './create-report.dto';
+import { Hazard } from '../hazards/hazard.entity';
 import { HazardsService } from '../hazards/hazards.service';
 import { AiService } from '../ai/ai.service';
-import { Verdict } from '../ai/verdict';
+import { fallbackClearDays, Verdict } from '../ai/verdict';
 import { PhotoStorageService } from './photo-storage.service';
 
 export interface UploadedPhoto {
@@ -46,6 +47,7 @@ export class ReportsService {
         dangerLevel: dto.dangerLevel ?? 'moderate',
         confidence: dto.confidence ?? 0,
         caption: dto.caption,
+        clearsInDays: dto.clearsInDays ?? fallbackClearDays(dto.kind),
         source: dto.verdictSource ?? 'rider',
       };
     }
