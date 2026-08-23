@@ -85,9 +85,16 @@ const KIND_WORDS: Record<HazardKind, string> = {
 /**
  * The question to put to the model about a fix photo.
  *
- * Comparative on purpose. Asked in isolation — "is this road clear?" — a model
- * says yes to any tidy photo, including a stretch that never had a hazard on
- * it. Naming what was reported is what makes the answer mean anything.
+ * Names what was reported so the model knows what to look for, but the benefit
+ * of the doubt goes to the rider. Asked to prove a repair, a model refuses on
+ * anything it cannot match to the original photo — a clear, ordinary street
+ * came back "still looks like a hazard" because it was framed differently.
+ *
+ * The question is about the line a rider takes, not about the whole frame.
+ * Told to look for hazards, a model finds the cones stacked on the verge and
+ * calls the road closed, while two cyclists ride past them in the same photo.
+ * Roadworks parked beside a route that people are visibly riding is a route
+ * that got its road back.
  */
 export function fixPrompt(context: FixContext): string {
   const reported = context.caption.trim()
@@ -96,12 +103,31 @@ export function fixPrompt(context: FixContext): string {
 
   return `${reported}
 
-Another rider has gone back and photographed the same spot. Judge only what is
-visible in this new photo: has that hazard been repaired or cleared?
+Another rider has gone back and photographed the spot to show it has been dealt
+with. They were standing there and you were not, so take them at their word
+unless the photo itself contradicts them.
 
-Answer fixed: true only if the photo shows the hazard genuinely dealt with —
-resurfaced, removed, reopened. Answer false if it is still there, only partly
-done, or the photo does not show enough to tell. Say which in the caption, in
-one plain sentence. Give a low confidence when the photo is unclear or shows a
-different spot.`;
+Judge the way a rider would actually go through here, not the whole picture.
+Only what stands in that path counts.
+
+Answer fixed: true for any ordinary, usable road or path — clear surface,
+nothing standing in the riding line, lit or in daylight. It does not have to
+match the original photo's framing, angle or surroundings, and it does not have
+to show evidence that a repair happened. A plain street with traffic, parked
+cars, people, buildings or street furniture in it counts as fixed. So does one
+with roadworks, signs, barriers or cones set off to the side, on a verge, a
+footway, a closed parking bay or the far side of the street, as long as the
+riding line past them is open. Anyone visibly cycling or walking through
+unobstructed settles it: the way is passable.
+
+Answer fixed: false only when the photo shows one of these:
+- Something that is not a road or path at all — an interior, a screenshot, a
+  person, a close-up of nothing in particular.
+- A hazard in the rider's way: works or barriers across the route, a dug-up,
+  broken or potholed surface where they would ride, debris or a fallen branch
+  over the way, the route closed or fenced off with no way past, or a stretch
+  that is dark and unlit.
+
+Say what you see in the caption, in one plain sentence. Confidence is how sure
+you are of that answer — not how closely this photo resembles the old one.`;
 }
