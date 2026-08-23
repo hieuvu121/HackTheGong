@@ -71,7 +71,7 @@ Untested — no SDK on the dev machine. `npx expo run:android` should work in pr
 ## 3. Verify
 
 ```bash
-npm test          # 154 tests (plus 11 in backend/)
+npm test          # 268 tests (plus 64 in backend/)
 npx tsc --noEmit  # typecheck
 ```
 
