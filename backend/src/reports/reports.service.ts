@@ -8,6 +8,7 @@ import { HazardsService } from '../hazards/hazards.service';
 import { AiService } from '../ai/ai.service';
 import { fallbackClearDays, FixVerdict, Verdict } from '../ai/verdict';
 import { PhotoStorageService } from './photo-storage.service';
+import { toReadableImage } from './image-format';
 
 export interface UploadedPhoto {
   buffer: Buffer;
@@ -36,8 +37,23 @@ export class ReportsService {
     return this.reports.find({ order: { createdAt: 'DESC' } });
   }
 
-  analyze(photo: UploadedPhoto): Promise<Verdict> {
-    return this.ai.analyze(photo.buffer, photo.mimetype);
+  /**
+   * Every photo passes through here first.
+   *
+   * An iPhone library photo arrives as HEIC, which neither the model nor a
+   * non-Apple browser can read — so it is turned into JPEG once, at the door,
+   * and everything downstream deals only in formats that work.
+   */
+  private readable(photo: UploadedPhoto): Promise<UploadedPhoto> {
+    return toReadableImage(photo.buffer, photo.mimetype).then((image) => ({
+      buffer: image.buffer,
+      mimetype: image.mimeType,
+    }));
+  }
+
+  async analyze(photo: UploadedPhoto): Promise<Verdict> {
+    const image = await this.readable(photo);
+    return this.ai.analyze(image.buffer, image.mimetype);
   }
 
   /**
@@ -55,7 +71,8 @@ export class ReportsService {
       (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
     ).at(-1);
 
-    return this.ai.assessFix(photo.buffer, photo.mimetype, {
+    const image = await this.readable(photo);
+    return this.ai.assessFix(image.buffer, image.mimetype, {
       kind: hazard.kind,
       caption: latest?.aiCaption ?? '',
     });
@@ -116,8 +133,10 @@ export class ReportsService {
     if (!photo) throw new BadRequestException('A photo is required.');
 
     // Disk first: a model outage must not cost the rider the photo they stood
-    // in the road to take.
-    const filename = await this.photos.save(photo.buffer, photo.mimetype);
+    // in the road to take. Transcoded before saving, so what is stored is what
+    // browsers can display.
+    const image = await this.readable(photo);
+    const filename = await this.photos.save(image.buffer, image.mimetype);
     const at = { lng: dto.lng, lat: dto.lat };
     const intent = dto.intent ?? 'report';
 
@@ -132,7 +151,7 @@ export class ReportsService {
     const verdict =
       intent === 'fix' && hazard
         ? this.fixVerdict(dto, hazard)
-        : await this.settleVerdict(dto, photo);
+        : await this.settleVerdict(dto, image);
 
     // No target given: fold into whatever is already pinned here, or open a
     // new pin. Two riders photographing one pothole should not make two.
