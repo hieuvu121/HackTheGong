@@ -6,6 +6,7 @@ import { MapViewProps, STYLE_URL } from './types';
 import { routeFeature, pointFeatureCollection, circleFeatureCollection } from './geojson';
 import { HazardPin } from '../components/HazardPin';
 import { hazardPinState } from '../lib/pins';
+import { isHazardActiveAt } from '../lib/time';
 import { KIND_LABEL } from '../data/types';
 import { colors } from '../theme/tokens';
 
@@ -136,6 +137,8 @@ export default function MapView(props: MapViewProps) {
           <HazardPin
             level={h.dangerLevel}
             state={hazardPinState(h)}
+            night={h.kind === 'unlit'}
+            dormant={!isHazardActiveAt(h, props.at ?? new Date())}
             label={`${KIND_LABEL[h.kind]} on ${h.streetName}`}
             onPress={() => props.onHazardPress?.(h.id)}
           />

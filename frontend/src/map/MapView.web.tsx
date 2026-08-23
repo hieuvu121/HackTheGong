@@ -9,6 +9,7 @@ import { MapViewProps, STYLE_URL } from './types';
 import { routeFeature, pointFeatureCollection, circleFeatureCollection } from './geojson';
 import { HazardPin } from '../components/HazardPin';
 import { hazardPinState } from '../lib/pins';
+import { isHazardActiveAt } from '../lib/time';
 import { Hazard, KIND_LABEL } from '../data/types';
 import { colors } from '../theme/tokens';
 

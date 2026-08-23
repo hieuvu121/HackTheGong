@@ -9,7 +9,7 @@ import { PhotoCarousel } from '../../src/components/PhotoCarousel';
 import { Button } from '../../src/components/Button';
 import { NavButton } from '../../src/components/NavButton';
 import { useGoBack } from '../../src/lib/useGoBack';
-import { formatWindow } from '../../src/lib/time';
+import { describeWindow } from '../../src/lib/time';
 import { mightBeFixed } from '../../src/lib/staleness';
 import { hazardPinState } from '../../src/lib/pins';
 import { colors, radii, spacing } from '../../src/theme/tokens';
@@ -55,6 +55,7 @@ export default function Hazard() {
   // this kind of hazard usually lasts. Neither retires anything on its own.
   const unconfirmed = hazard.status !== 'fixed' && hazardPinState(hazard) === 'unconfirmed';
   const stale = mightBeFixed(hazard);
+  const windowText = describeWindow(hazard, new Date());
 
   return (
     <ScrollView
@@ -119,10 +120,10 @@ export default function Hazard() {
 
       {/* The routing engine only counts this hazard inside its window, so the
           rider needs to see the window too. */}
-      {hazard.activeWindow && (
+      {windowText && (
         <View testID="active-window" style={styles.window}>
           <Text style={[type.bodyMdStrong, { color: colors.ink }]}>
-            {`Only a hazard ${formatWindow(hazard.activeWindow)}`}
+            {`Only a hazard ${windowText}`}
           </Text>
           <Text style={[type.bodySm, { color: colors.body }]}>
             Routes leaving outside those hours are not sent around it.

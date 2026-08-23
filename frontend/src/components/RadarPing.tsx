@@ -15,6 +15,7 @@ interface Props {
   dashed?: boolean;
   /** Opacity a ring starts at, before fading out. */
   intensity?: number;
+  testID?: string;
 }
 
 const NATIVE = Platform.OS !== 'web';
@@ -35,6 +36,7 @@ export function RadarPing({
   durationMs = 2600,
   dashed = false,
   intensity = 0.4,
+  testID,
 }: Props) {
   const progress = useRef(
     Array.from({ length: rings }, () => new Animated.Value(0)),
@@ -81,7 +83,7 @@ export function RadarPing({
   }, [still, durationMs, rings, progress]);
 
   return (
-    <View style={styles.wrap} pointerEvents="none">
+    <View testID={testID} style={styles.wrap} pointerEvents="none">
       {progress.map((value, i) => (
         <Animated.View
           key={i}

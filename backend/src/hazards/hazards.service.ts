@@ -92,9 +92,12 @@ export class HazardsService {
       status: 'active',
       streetName,
       expectedClearDays: verdict.clearsInDays,
-      // Unlit roads are the one kind that comes and goes with the clock.
-      activeWindowStart: verdict.kind === 'unlit' ? 19 * 60 : null,
-      activeWindowEnd: verdict.kind === 'unlit' ? 6 * 60 : null,
+      // No window. An unlit road comes and goes with the clock, but with the
+      // sun rather than a stamped hour — darkness moves over three hours
+      // across the year here, so a stored 19:00 would be wrong for most of it
+      // and would only contradict what the app computes from the position.
+      activeWindowStart: null,
+      activeWindowEnd: null,
     });
     return this.hazards.save(hazard);
   }
