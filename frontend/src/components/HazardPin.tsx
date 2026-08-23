@@ -8,6 +8,10 @@ import { colors, danger, radii, shadows } from '../theme/tokens';
 interface Props {
   level: DangerLevel;
   state: PinState;
+  /** This hazard only counts after dark — an unlit road. */
+  night?: boolean;
+  /** It is a night hazard, and right now it is daylight. */
+  dormant?: boolean;
   onPress?: () => void;
   label?: string;
   testID?: string;
@@ -67,16 +71,29 @@ function WarningGlyph({ fill, ink }: { fill: string; ink: string }) {
   );
 }
 
-export function HazardPin({ level, state, onPress, label, testID }: Props) {
-  const s = spec(state, level);
+export function HazardPin({ level, state, night, dormant, onPress, label, testID }: Props) {
+  const base = spec(state, level);
+
+  /**
+   * Out of hours, the pin stops pulsing and fades.
+   *
+   * The rings are how a pin says "I am a problem right now", and an unlit road
+   * at noon is not. It stays drawn, though — dimmed and marked — so a rider
+   * planning an evening ride can see what is waiting for them after dusk.
+   */
+  const s: Spec = dormant
+    ? { ...base, filled: false, rings: 0, opacity: 0.45 }
+    : base;
+
   const ink = s.filled ? colors.onDark : s.color;
   const fill = s.filled ? s.color : colors.canvas;
+  const spokenLabel = night && label ? `${label}, only after dark` : label;
 
   return (
     <Pressable
       testID={testID}
       accessibilityRole={onPress ? 'button' : 'image'}
-      accessibilityLabel={label}
+      accessibilityLabel={spokenLabel}
       onPress={onPress}
       // The disc is well under the 44pt minimum on purpose — it is a map
       // marker, not a button — so the tap target is padded back out.
@@ -88,6 +105,7 @@ export function HazardPin({ level, state, onPress, label, testID }: Props) {
       ]}
     >
       <RadarPing
+        testID="radar"
         size={s.size}
         color={s.color}
         rings={s.rings}
@@ -131,12 +149,41 @@ export function HazardPin({ level, state, onPress, label, testID }: Props) {
           <Text style={[styles.symbol, { color: ink }]}>?</Text>
         )}
       </View>
+
+      {/* A crescent, not a colour: the danger colours already mean severity
+          here, and tinting the pin for night would read as a rating. */}
+      {night && (
+        <View testID="night-marker" style={[styles.moon, { borderColor: s.color }]}>
+          <View style={[styles.moonBite, { backgroundColor: colors.canvas }]} />
+        </View>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   tap: { alignItems: 'center', justifyContent: 'center' },
+  /* Two overlapping discs make the crescent, the same trick the warning
+     triangle uses — no glyph font, no asset. */
+  moon: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    width: 13,
+    height: 13,
+    borderRadius: radii.full,
+    borderWidth: 2,
+    backgroundColor: colors.canvas,
+    overflow: 'hidden',
+  },
+  moonBite: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    width: 11,
+    height: 11,
+    borderRadius: radii.full,
+  },
   pressed: { transform: [{ scale: 0.9 }] },
   glow: {
     position: 'absolute',

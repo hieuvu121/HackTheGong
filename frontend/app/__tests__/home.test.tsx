@@ -13,7 +13,14 @@ jest.mock('expo-router', () => ({
     return null;
   },
 }));
-jest.mock('../../src/map/MapView', () => 'MapView');
+// Captures what the screen hands the map, so the tests can assert on the
+// pins and the departure time rather than on pixels.
+const mockMapProps: Record<string, unknown>[] = [];
+jest.mock('../../src/map/MapView', () => (props: Record<string, unknown>) => {
+  mockMapProps.push(props);
+  return null;
+});
+const lastMap = () => mockMapProps[mockMapProps.length - 1];
 
 beforeEach(() => {
   mockPush.mockClear();
@@ -74,5 +81,37 @@ describe('First launch', () => {
     await render(<Home />);
     expect(mockRedirect).not.toHaveBeenCalled();
     expect(screen.getByText('Where to?')).toBeTruthy();
+  });
+});
+
+describe('unlit roads on the map', () => {
+  /**
+   * They used to vanish outside their hours, which left a rider planning an
+   * evening ride at lunchtime with no way to see what was waiting for them.
+   * They stay drawn now — dormant, so they read as not-yet-a-problem.
+   */
+  it('keeps unlit hazards on the map in daylight', async () => {
+    await render(<Home />);
+    const drawn = lastMap().hazards as { kind: string }[];
+    expect(drawn.some((h) => h.kind === 'unlit')).toBe(true);
+  });
+
+  it('hands the map the time being planned for, so pins know if they count', async () => {
+    await render(<Home />);
+    expect(lastMap().at).toBeInstanceOf(Date);
+  });
+
+  it('never draws a hazard that has been retired', async () => {
+    await render(<Home />);
+    const drawn = lastMap().hazards as { status: string }[];
+    expect(drawn.every((h) => h.status !== 'fixed')).toBe(true);
+  });
+
+  it('announces unlit roads once the departure time is after dark', async () => {
+    await render(<Home />);
+    expect(screen.queryByTestId('night-banner')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('time-chip'));
+    expect(screen.getByTestId('night-banner')).toBeTruthy();
   });
 });

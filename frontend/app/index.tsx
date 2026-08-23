@@ -3,11 +3,11 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import MapView from '../src/map/MapView';
 import { TimeChip } from '../src/components/TimeChip';
+import { NightBanner } from '../src/components/NightBanner';
 import { ReportFab } from '../src/components/ReportFab';
 import { MapControl } from '../src/components/MapControl';
 import { useHazards } from '../src/data/useHazards';
 import { ORIGIN, DEFAULT_ZOOM } from '../src/data/locale';
-import { isHazardActiveAt } from '../src/lib/time';
 import { hasSeenOnboarding } from '../src/lib/firstRun';
 import { colors, radii, spacing, shadows } from '../src/theme/tokens';
 import { useScreenTop, useScreenBottom } from '../src/theme/insets';
@@ -24,9 +24,14 @@ export default function Home() {
   const [recenter, setRecenter] = useState(0);
 
   const { hazards } = useHazards();
-  const active = useMemo(
-    () => hazards.filter((h) => isHazardActiveAt(h, departAt)),
-    [hazards, departAt],
+
+  // Everything a rider might meet, including hazards that do not count at the
+  // chosen time. Those draw dormant rather than vanishing: an unlit road is
+  // still worth knowing about at lunchtime if you are riding home at nine.
+  // Route scoring still filters, so a dormant hazard never bends a route.
+  const shown = useMemo(
+    () => hazards.filter((h) => h.status !== 'fixed'),
+    [hazards],
   );
 
   // Toggle between now and 21:00 so the unlit hazard can be demoed.
@@ -51,7 +56,8 @@ export default function Home() {
       <MapView
         center={ORIGIN}
         zoom={DEFAULT_ZOOM}
-        hazards={active}
+        hazards={shown}
+        at={departAt}
         userLocation={ORIGIN}
         recenterNonce={recenter}
         onHazardPress={(id) => router.push(`/hazard/${id}`)}
@@ -78,6 +84,8 @@ export default function Home() {
           <View style={styles.divider} />
           <TimeChip testID="time-chip" at={departAt} isNow={isNow} onPress={cycleTime} />
         </View>
+
+        <NightBanner hazards={shown} at={departAt} coord={ORIGIN} />
       </View>
 
       <View style={[styles.controls, { bottom: screenBottom + 124 }]} pointerEvents="box-none">

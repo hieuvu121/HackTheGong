@@ -6,9 +6,15 @@ import { createPortal } from 'react-dom';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapViewProps, STYLE_URL } from './types';
-import { routeFeature, pointFeatureCollection, circleFeatureCollection } from './geojson';
+import {
+  routeFeature,
+  pointFeatureCollection,
+  circleFeatureCollection,
+  unlitRoadCollection,
+} from './geojson';
 import { HazardPin } from '../components/HazardPin';
 import { hazardPinState } from '../lib/pins';
+import { isHazardActiveAt } from '../lib/time';
 import { Hazard, KIND_LABEL } from '../data/types';
 import { colors } from '../theme/tokens';
 
@@ -67,6 +73,25 @@ export default function MapView(props: MapViewProps) {
           'line-color': ['case', ['get', 'active'], colors.ink, colors.mute],
           'line-width': ['case', ['get', 'active'], 6, 4],
           'line-opacity': ['case', ['get', 'active'], 1, 0.55],
+        },
+      });
+
+      // Above the routes, below the pins: the road is context for a pin, not
+      // something to tap. Bold while the road is actually dark, faint the rest
+      // of the day so an evening ride can still be planned at noon.
+      m.addSource('unlit-roads', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      m.addLayer({
+        id: 'unlit-roads-line',
+        type: 'line',
+        source: 'unlit-roads',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['case', ['get', 'active'], 9, 6],
+          'line-opacity': ['case', ['get', 'active'], 0.85, 0.28],
         },
       });
 
@@ -138,6 +163,9 @@ export default function MapView(props: MapViewProps) {
         pointFeatureCollection(props.userLocation ? [props.userLocation] : []) as never,
       );
 
+      const ns = m.getSource('unlit-roads') as maplibregl.GeoJSONSource | undefined;
+      ns?.setData(unlitRoadCollection(props.hazards ?? [], props.at ?? new Date()) as never);
+
       const gs = m.getSource('gate') as maplibregl.GeoJSONSource | undefined;
       gs?.setData(
         (props.gateCircle
@@ -148,7 +176,7 @@ export default function MapView(props: MapViewProps) {
 
     if (m.isStyleLoaded()) apply();
     else m.once('load', apply);
-  }, [props.routes, props.activeRouteId, props.userLocation, props.gateCircle]);
+  }, [props.routes, props.activeRouteId, props.userLocation, props.gateCircle, props.hazards, props.at]);
 
   // Reconcile one marker per hazard, reusing the element so the ping animation
   // is not restarted every time the hazard list is recomputed.
@@ -234,6 +262,8 @@ export default function MapView(props: MapViewProps) {
           <HazardPin
             level={hazard.dangerLevel}
             state={hazardPinState(hazard)}
+            night={hazard.kind === 'unlit'}
+            dormant={!isHazardActiveAt(hazard, props.at ?? new Date())}
             label={`${KIND_LABEL[hazard.kind]} on ${hazard.streetName}`}
             onPress={() => cb.current?.(hazard.id)}
           />,

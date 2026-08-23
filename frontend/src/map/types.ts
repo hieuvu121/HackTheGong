@@ -4,6 +4,11 @@ export interface MapViewProps {
   center: LngLat;
   zoom?: number;
   hazards?: Hazard[];
+  /**
+   * The time the rider is planning for. Pins for hazards that do not count
+   * at that time are drawn dormant rather than hidden.
+   */
+  at?: Date;
   routes?: RouteOption[];
   activeRouteId?: string;
   userLocation?: LngLat;
