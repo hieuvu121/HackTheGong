@@ -82,6 +82,12 @@ describe('expected clear time', () => {
 describe('assessing whether a hazard has been fixed', () => {
   const context = { kind: 'pothole' as const, caption: 'Deep pothole in the bike lane.' };
 
+  /**
+   * The prompt is hard-wrapped for readability, so a phrase can straddle a line
+   * break. Assert on the wording, not on where it happens to wrap today.
+   */
+  const wording = (c: typeof context) => fixPrompt(c).replace(/\s+/g, ' ');
+
   it('asks a different question than hazard classification', () => {
     // The bug this exists for: a fix photo went through the hazard prompt and
     // came back classified as a hazard, so a photo of freshly laid tarmac was
@@ -100,6 +106,43 @@ describe('assessing whether a hazard has been fixed', () => {
     const prompt = fixPrompt({ kind: 'pothole', caption: '' });
     expect(prompt).toMatch(/pothole/i);
     expect(prompt.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * A rider photographed a clear street and was told it still looked like an
+   * active hazard, because the shot did not match the original framing. The
+   * rider was standing there; only a hazard visible in the photo, or a photo
+   * that is not of a road, should overrule them.
+   */
+  it('accepts an ordinary road rather than demanding proof of the repair', () => {
+    const prompt = wording(context);
+    expect(prompt).toMatch(/fixed: true for any ordinary, usable road or path/i);
+    expect(prompt).toMatch(/does not have to match the original photo/i);
+    expect(prompt).toMatch(/fixed: false only when/i);
+  });
+
+  it('names the conditions that still count as a hazard', () => {
+    const prompt = wording(context);
+    for (const condition of [
+      /not a road or path at all/i,
+      /barriers across the route/i,
+      /debris or a fallen branch/i,
+      /dark and unlit/i,
+    ]) {
+      expect(prompt).toMatch(condition);
+    }
+  });
+
+  /**
+   * A photo of two cyclists riding a clear waterfront street came back "still
+   * looks like a hazard", 91% confident, because roadwork cones were stacked on
+   * the far verge. What blocks a rider is what counts, not what is in frame.
+   */
+  it('asks about the riding line rather than the whole frame', () => {
+    const prompt = wording(context);
+    expect(prompt).toMatch(/not the whole picture/i);
+    expect(prompt).toMatch(/set off to the side/i);
+    expect(prompt).toMatch(/cycling or walking through unobstructed/i);
   });
 
   describe('with no model available', () => {
